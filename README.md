@@ -1,5 +1,5 @@
 ---
-title: OutofSync
+title: OutofLipSync
 emoji: 💋
 colorFrom: yellow
 colorTo: red
