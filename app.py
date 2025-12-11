@@ -814,7 +814,7 @@ def process_video(video_file, allow_lipsync, duration):
         timeline = timeline.overlay(original_chunk, position=g_start)
 
 
-    video_in = video_file
+    video_in = video_path
     audio_in = output_dir + "/final_output.wav"
     audio_16k_in = output_dir + "/final_16k_output.wav"
     
