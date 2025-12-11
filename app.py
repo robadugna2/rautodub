@@ -82,13 +82,13 @@ from datetime import timedelta
 import torchaudio
 import tigersound.look2hear.models
 
-@spaces.GPU()
-def print_ort():
+# @spaces.GPU()
+# def print_ort():
 
-    import onnxruntime as ort
-    print(ort.get_available_providers())
+#     import onnxruntime as ort
+#     print(ort.get_available_providers())
 
-print_ort()
+# print_ort()
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 snapshot_download("IndexTeam/IndexTTS-2", local_dir=os.path.join(current_dir,"checkpoints"))
@@ -556,21 +556,29 @@ def build_srt(segments: List[Dict], audio_wav: str, out_srt_path: str):
     with open(out_srt_path, "w", encoding="utf-8") as f:
         f.write(srt.compose(subtitles))
 
-def translate_video(video_file, duration):
-    return process_video(video_file, False, duration)
+def translate_video(video_file, duration, session_id = None):
 
-def translate_lipsync_video(video_file, duration):
-    return process_video(video_file, True, duration)
+    if video_file is None:
+        raise gr.Error("Please upload a clip.")
+
+    return process_video(video_file, False, duration, session_id)
+
+def translate_lipsync_video(video_file, duration, session_id = None):
+
+    if video_file is None:
+        raise gr.Error("Please upload a clip.")
+    
+    return process_video(video_file, True, duration, session_id)
 
 
-def run_example(video_file, allow_lipsync, duration):
+def run_example(video_file, allow_lipsync, duration, session_id = None):
 
     with timer("processed"):
-        result = process_video(video_file, allow_lipsync, duration)
+        result = process_video(video_file, allow_lipsync, duration, session_id)
 
     return result
 
-def get_duration(video_file, allow_lipsync, duration):
+def get_duration(video_file, allow_lipsync, duration, session_id):
 
     if allow_lipsync:
         if duration <= 3:
@@ -587,16 +595,16 @@ def get_duration(video_file, allow_lipsync, duration):
         return 40
         
 @spaces.GPU(duration=get_duration)
-def process_video(video_file, allow_lipsync, duration):
+def process_video(video_file, allow_lipsync, duration, session_id = None):
     """
     Gradio callback:
     - video_file: temp file object/path from Gradio
     - returns path to generated SRT file (for download)
     """
-    if video_file is None:
-        raise gr.Error("Please upload an MP4 video.")
+    import onnxruntime as ort
 
-    session_id = uuid.uuid4().hex
+    if session_id == None:
+        session_id = uuid.uuid4().hex
 
     output_dir = os.path.join(os.environ["PROCESSED_RESULTS"], session_id)
     os.makedirs(output_dir, exist_ok=True)
@@ -997,8 +1005,22 @@ css = """
     }
     """
 
+def cleanup(request: gr.Request):
+
+    sid = request.session_hash
+    if sid:
+        print(f"{sid} left")
+        d1 = os.path.join(os.environ["PROCESSED_RESULTS"], sid)
+        shutil.rmtree(d1, ignore_errors=True)
+        
+def start_session(request: gr.Request):
+
+    return request.session_hash
 
 with gr.Blocks(css=css) as demo:
+
+    session_state = gr.State()
+    demo.load(start_session, outputs=[session_state])
 
     with gr.Column(elem_id="col-container"):
         gr.HTML(
@@ -1100,17 +1122,18 @@ with gr.Blocks(css=css) as demo:
 
     translate_btn.click(
         fn=translate_video,
-        inputs=[video_input, duration],
+        inputs=[video_input, duration, session_state],
         outputs=[video_output, srt_output, vocal_16k_output],
     )
     
     translate_lipsync_btn.click(
         fn=translate_lipsync_video,
-        inputs=[video_input, duration],
+        inputs=[video_input, duration, session_state],
         outputs=[video_output, srt_output, vocal_16k_output],
     )
 
 
 if __name__ == "__main__":
+    demo.unload(cleanup)
     demo.queue()
     demo.launch()
