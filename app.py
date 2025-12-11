@@ -1062,19 +1062,19 @@ with gr.Blocks(css=css) as demo:
                         [
                             "assets/popup-2.mp4",
                             True,
-                            20
+                            5
                         ],
 
                         [
                             "assets/popup-2.mp4",
                             True,
-                            30
+                            15
                         ],
 
                         [
                             "assets/popup-2.mp4",
                             True,
-                            10
+                            25
                         ],
 
                         [
