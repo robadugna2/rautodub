@@ -1036,6 +1036,8 @@ with gr.Blocks(css=css) as demo:
                     <img src="https://img.shields.io/badge/🤗-Follow Me-yellow.svg">
                 </a>
                 <a href="https://www.buymeacoffee.com/outofai" style="display: inline-block; vertical-align: middle; margin-left: 0.5em;" target="_blank"><img src="https://img.shields.io/badge/-buy_me_a%C2%A0coffee-red?logo=buy-me-a-coffee" alt="Buy Me A Coffee"></a>
+            </div>
+            <div style="text-align: center;">
                 <p style="font-size:16px; display: inline; margin: 0;">
                     Translate and lipsync your clips to English
                 </p>
@@ -1084,31 +1086,31 @@ with gr.Blocks(css=css) as demo:
                         [
                             "assets/spanish-2.mp4",
                             True,
-                            10
+                            5
                         ],
 
                         [
                             "assets/spanish.mp4",
                             True,
-                            10
+                            5
                         ],
 
                         [
                             "assets/german.mp4",
                             True,
-                            10
+                            5
                         ],
 
                         [
                             "assets/italian.mp4",
                             True,
-                            10
+                            5
                         ],
             
                         [
                             "assets/french-movie.mp4",
                             True,
-                            10
+                            5
                         ],
             
                     ],
