@@ -6,6 +6,10 @@ colorTo: red
 sdk: gradio
 sdk_version: 5.36.2
 app_file: app.py
+tags:
+  - heygen
+  - translate
+  - lipsync
 pinned: false
 short_description: Translate and Lipsync any video clips to English
 ---

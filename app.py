@@ -1033,6 +1033,7 @@ with gr.Blocks(css=css) as demo:
                     label="OG Clip",
                     height=512
                 )
+                duration = gr.Slider(5, 30, 10, step=1, label="Duration(s)")
 
             with gr.Column(elem_id="step-column"):
                 gr.HTML("""
@@ -1043,7 +1044,6 @@ with gr.Blocks(css=css) as demo:
 
                 video_output = gr.Video(label="Output", height=512)
                 lipsync = gr.Checkbox(label="Lipsync", value=False, visible=False)
-                duration = gr.Slider(5, 30, 30, step=1, label="Duration(s)")
                 translate_btn = gr.Button("🤹‍♂️ Translate")
                 translate_lipsync_btn = gr.Button("🤹‍♂️ Translate + 💋 Lipsync", variant='primary', elem_classes="button-gradient")
         
