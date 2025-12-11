@@ -1014,6 +1014,9 @@ with gr.Blocks(css=css) as demo:
                     <img src="https://img.shields.io/badge/🤗-Follow Me-yellow.svg">
                 </a>
                 <a href="https://www.buymeacoffee.com/outofai" style="display: inline-block; vertical-align: middle; margin-left: 0.5em;" target="_blank"><img src="https://img.shields.io/badge/-buy_me_a%C2%A0coffee-red?logo=buy-me-a-coffee" alt="Buy Me A Coffee"></a>
+                <p style="font-size:16px; display: inline; margin: 0;">
+                    Translate and lipsync your clips to English
+                </p>
             </div>
             """
         )
@@ -1040,11 +1043,16 @@ with gr.Blocks(css=css) as demo:
 
                 video_output = gr.Video(label="Output", height=512)
                 lipsync = gr.Checkbox(label="Lipsync", value=False, visible=False)
-                duration = gr.Slider(5, 30, 30, step=1)
+                duration = gr.Slider(5, 30, 30, step=1, label="Duration(s)")
                 translate_btn = gr.Button("🤹‍♂️ Translate")
                 translate_lipsync_btn = gr.Button("🤹‍♂️ Translate + 💋 Lipsync", variant='primary', elem_classes="button-gradient")
         
             with gr.Column(elem_id="step-column"):
+                gr.HTML("""
+                <div>
+                    <span style="font-size: 24px;">Lipsynced Examples </span><br>
+                </div>
+                """)
                 vocal_16k_output = gr.File(label="Vocal 16k", visible=False)
                 srt_output = gr.File(label="Download translated diarized SRT", visible=False)
 
@@ -1062,13 +1070,7 @@ with gr.Blocks(css=css) as demo:
                             True,
                             10
                         ],
-                       
-                        [
-                            "assets/japanese.mp4",
-                            True,
-                            10
-                        ],
-                       
+
                         [
                             "assets/german.mp4",
                             True,
