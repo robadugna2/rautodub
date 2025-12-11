@@ -556,13 +556,12 @@ def build_srt(segments: List[Dict], audio_wav: str, out_srt_path: str):
     with open(out_srt_path, "w", encoding="utf-8") as f:
         f.write(srt.compose(subtitles))
 
-def translate_video(video_file):
+def translate_video(video_file, duration):
+    return process_video(video_file, False, duration)
 
-    return process_video(video_file, False)
+def translate_lipsync_video(video_file, duration):
+    return process_video(video_file, True, duration)
 
-def translate_lipsync_video(video_file):
-
-    return process_video(video_file, True)
 
 def run_example(video_file, allow_lipsync, duration):
 
@@ -572,7 +571,7 @@ def run_example(video_file, allow_lipsync, duration):
     return result
 
 @spaces.GPU(duration=350)
-def process_video(video_file, allow_lipsync, duration = 30):
+def process_video(video_file, allow_lipsync, duration):
     """
     Gradio callback:
     - video_file: temp file object/path from Gradio
@@ -598,11 +597,13 @@ def process_video(video_file, allow_lipsync, duration = 30):
     # Create temp directory to hold WAV + SRT
     srt_path = os.path.join(output_dir, "diarized_translated.srt")
 
-    src_video_path = video_file
+    src_video_path = video_path
 
     cropped_video_path = os.path.join(output_dir, "input_30s.mp4")
 
     duration_s = int(duration)
+
+    print(f"duration_s:{duration_s}")
     
     cmd = [                                                               
         "ffmpeg",                                                         
@@ -1096,17 +1097,19 @@ with gr.Blocks(css=css) as demo:
                     cache_examples=True
                     )
         
+
     translate_btn.click(
         fn=translate_video,
-        inputs=[video_input],
+        inputs=[video_input, duration],
+        outputs=[video_output, srt_output, vocal_16k_output],
+    )
+    
+    translate_lipsync_btn.click(
+        fn=translate_lipsync_video,
+        inputs=[video_input, duration],
         outputs=[video_output, srt_output, vocal_16k_output],
     )
 
-    translate_lipsync_btn.click(
-        fn=translate_lipsync_video,
-        inputs=[video_input],
-        outputs=[video_output, srt_output, vocal_16k_output],
-    )
 
 if __name__ == "__main__":
     demo.queue()
