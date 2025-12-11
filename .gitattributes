@@ -49,3 +49,4 @@ assets/spanish-2.mp4 filter=lfs diff=lfs merge=lfs -text
 assets/spanish-3.mp4 filter=lfs diff=lfs merge=lfs -text
 assets/spanish.mp4 filter=lfs diff=lfs merge=lfs -text
 assets/trolls.mp4 filter=lfs diff=lfs merge=lfs -text
+assets/japanese.mp4 filter=lfs diff=lfs merge=lfs -text
