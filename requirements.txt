@@ -1,0 +1,74 @@
+# --- Core Torch Stack ---
+torchaudio==2.8.0
+torchvision==0.23.0
+triton
+deepspeed==0.17.1
+flash-attn-3 @ https://huggingface.co/alexnasa/flash-attn-3/resolve/main/128/flash_attn_3-3.0.0b1-cp39-abi3-linux_x86_64.whl
+
+# --- Whisper / ASR / Audio Processing ---
+pyannote.audio
+ctranslate2
+faster-whisper[cuda12x]
+pydub==0.25.1
+srt
+audio-separator==0.24.1
+ffmpeg-python==0.2.0
+python_speech_features==0.6
+librosa==0.10.2.post1  # higher than 0.10.1
+
+# --- NLP / Transformers / ML Utils ---
+accelerate==1.8.1        # higher than 0.26.1
+transformers==4.52.3     # higher than 4.52.1
+tokenizers==0.21.0
+sentencepiece
+g2p-en==2.1.0
+cn2an==0.5.22
+textstat
+omegaconf==2.3.0          # explicit highest version
+munch==4.0.0
+tqdm
+json5==0.10.0
+
+# --- Vision / Diffusion / Media ---
+diffusers==0.33.1
+huggingface-hub<1.0
+imageio==2.27.0
+decord==0.6.0
+opencv-python==4.9.0.80   # same version, deduped
+mediapipe==0.10.11
+av
+torch-fidelity==0.3.0
+torchmetrics==1.3.1
+lpips==0.1.4
+face-alignment==1.4.1
+insightface==0.7.3
+kornia==0.8.0
+scenedetect==0.6.1
+moviepy==1.0.3
+
+# --- Numerical / Scientific ---
+numpy==1.26.2   # higher than 1.24.4
+pandas==2.1.3   # higher than 2.0.3
+matplotlib==3.8.2
+numba==0.58.1
+Cython==3.0.7
+einops==0.7.0
+ninja==1.11.1.1
+
+# --- Model Repos & Tools ---
+descript-audiotools @ git+https://github.com/descriptinc/audiotools.git
+tigersound @ git+https://github.com/OutofAi/tigersound.git
+tensorboard
+hf-xet==1.1.8
+DeepCache==0.1.1
+ultralytics
+batch-face
+modelscope==1.27.0
+onnxruntime-gpu==1.21.0
+
+# --- Language-specific packages ---
+jieba==0.42.1
+
+# --- Environment-specific ---
+WeTextProcessing; platform_machine != "Darwin"
+wetext; platform_system == "Darwin"
