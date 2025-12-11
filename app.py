@@ -570,7 +570,23 @@ def run_example(video_file, allow_lipsync, duration):
 
     return result
 
-@spaces.GPU(duration=350)
+def get_duration(video_file, allow_lipsync, duration):
+
+    if allow_lipsync:
+        if duration <= 3:
+            return 30
+        elif duration <= 5:
+            return 60
+        elif duration <= 10:
+            return 90
+        elif duration <= 20:
+            return 120
+        elif duration <= 30:
+            return 150
+    else:
+        return 40
+        
+@spaces.GPU(duration=get_duration)
 def process_video(video_file, allow_lipsync, duration):
     """
     Gradio callback:
@@ -1024,7 +1040,7 @@ with gr.Blocks(css=css) as demo:
 
                 video_output = gr.Video(label="Output", height=512)
                 lipsync = gr.Checkbox(label="Lipsync", value=False, visible=False)
-                duration = gr.Slider(0, 30, 30, step=10)
+                duration = gr.Slider(5, 30, 30, step=1)
                 translate_btn = gr.Button("🤹‍♂️ Translate")
                 translate_lipsync_btn = gr.Button("🤹‍♂️ Translate + 💋 Lipsync", variant='primary', elem_classes="button-gradient")
         
@@ -1034,47 +1050,29 @@ with gr.Blocks(css=css) as demo:
 
                 cached_examples = gr.Examples(                    
                     examples=[ 
-            
+
                         [
-                            "assets/popup-2.mp4",
-                            False,
+                            "assets/spanish-2.mp4",
+                            True,
                             10
                         ],
 
                         [
-                            "assets/popup-2.mp4",
-                            False,
-                            20
+                            "assets/spanish.mp4",
+                            True,
+                            10
                         ],
-
+                       
                         [
-                            "assets/popup-2.mp4",
-                            False,
-                            30
+                            "assets/japanese.mp4",
+                            True,
+                            10
                         ],
-
+                       
                         [
                             "assets/german.mp4",
                             True,
                             10
-                        ],
-
-                        [
-                            "assets/popup-2.mp4",
-                            True,
-                            5
-                        ],
-
-                        [
-                            "assets/popup-2.mp4",
-                            True,
-                            15
-                        ],
-
-                        [
-                            "assets/popup-2.mp4",
-                            True,
-                            25
                         ],
 
                         [
