@@ -1082,33 +1082,32 @@ with gr.Blocks(css=css) as demo:
 
                 cached_examples = gr.Examples(                    
                     examples=[ 
-
                         [
-                            "assets/spanish-2.mp4",
+                            "alica-por-2.mp4",
                             True,
-                            5
+                            10
                         ],
 
                         [
-                            "assets/spanish.mp4",
+                            "ana-es.mp4",
                             True,
-                            5
+                            10
                         ],
 
                         [
-                            "assets/german.mp4",
+                            "elena-es.mp4",
                             True,
-                            5
+                            10
+                        ],
+            
+                        [
+                            "monica-ita.mp4",
+                            True,
+                            10
                         ],
 
                         [
                             "assets/italian.mp4",
-                            True,
-                            5
-                        ],
-            
-                        [
-                            "assets/french-movie.mp4",
                             True,
                             5
                         ],
