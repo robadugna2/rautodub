@@ -1059,6 +1059,20 @@ with gr.Blocks(css=css) as demo:
                 )
                 duration = gr.Slider(5, 30, 10, step=1, label="Duration(s)")
 
+                uncached_examples = gr.Examples(                    
+                    examples=[ 
+            
+                        [
+                            "assets/sofia-esp.mp4",
+                        ],
+
+                        [
+                            "assets/alba-port.mp4",
+                        ],
+                    ],
+                    inputs=video_input,
+                    )
+
             with gr.Column(elem_id="step-column"):
                 gr.HTML("""
                 <div>
