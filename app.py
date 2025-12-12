@@ -1072,6 +1072,10 @@ with gr.Blocks(css=css) as demo:
                         [
                             "assets/alba-port.mp4",
                         ],
+
+                        [
+                            "assets/lena-de.mp4",
+                        ],
                     ],
                     inputs=video_input,
                     )
