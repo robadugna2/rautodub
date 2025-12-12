@@ -1031,7 +1031,7 @@ with gr.Blocks(css=css) as demo:
             </div>
             <div style="text-align: center;">
                 <p style="font-size:16px; display: inline; margin: 0;">
-                    <strong>OutofSync </strong>
+                    <strong>OutofLipSync</strong>
                 </p>
                 <p style="font-size:16px; display: inline; margin: 0;">
                     -- HF Space By:
