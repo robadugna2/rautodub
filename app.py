@@ -1081,8 +1081,15 @@ with gr.Blocks(css=css) as demo:
 
                 cached_examples = gr.Examples(                    
                     examples=[ 
+            
                         [
-                            "assets/alica-por-2.mp4",
+                            "assets/monica-ita.mp4",
+                            True,
+                            5
+                        ],
+
+                        [
+                            "assets/elena-es.mp4",
                             True,
                             10
                         ],
@@ -1091,18 +1098,6 @@ with gr.Blocks(css=css) as demo:
                             "assets/ana-es.mp4",
                             True,
                             10
-                        ],
-
-                        [
-                            "assets/elena-es.mp4",
-                            True,
-                            10
-                        ],
-            
-                        [
-                            "assets/monica-ita.mp4",
-                            True,
-                            5
                         ],
                         
                         [
@@ -1116,6 +1111,13 @@ with gr.Blocks(css=css) as demo:
                             True,
                             5
                         ],
+
+                        [
+                            "assets/alica-por-2.mp4",
+                            True,
+                            10
+                        ],
+
             
                     ],
                     label="Cached Examples",
