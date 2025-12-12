@@ -1102,7 +1102,13 @@ with gr.Blocks(css=css) as demo:
                         [
                             "assets/monica-ita.mp4",
                             True,
-                            10
+                            5
+                        ],
+                        
+                        [
+                            "assets/spanish-2.mp4",
+                            True,
+                            5
                         ],
 
                         [
