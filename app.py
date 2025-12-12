@@ -8,7 +8,6 @@ snapshot_download(
     repo_id = "alexnasa/outofsync",
     local_dir = "./outofsync"  
 )
-
 sh("cd outofsync && pip install . && cd ..")
 sh("pip uninstall onnxruntime onnxruntime-gpu -y && pip install onnxruntime-gpu")
 
