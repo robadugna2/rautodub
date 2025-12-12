@@ -110,7 +110,10 @@ tts = IndexTTS2(model_dir="./checkpoints",
 os.environ["PROCESSED_RESULTS"] = f"{os.getcwd()}/proprocess_results"
 
 from lipsync import apply_lipsync
+import logging
 
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 def split_subtitles_max_duration(
     subtitles, 
