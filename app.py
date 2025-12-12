@@ -299,6 +299,7 @@ def extract_audio_to_wav(input_video: str, output_dir: str):
     cmd = [
         "ffmpeg",
         "-loglevel", "error",
+        "-y",
         "-i", video_path,
         "-vn",
         "-acodec", "pcm_s16le",
