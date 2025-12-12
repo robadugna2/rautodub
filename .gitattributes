@@ -54,3 +54,5 @@ assets/alica-por-2.mp4 filter=lfs diff=lfs merge=lfs -text
 assets/ana-es.mp4 filter=lfs diff=lfs merge=lfs -text
 assets/elena-es.mp4 filter=lfs diff=lfs merge=lfs -text
 assets/monica-ita.mp4 filter=lfs diff=lfs merge=lfs -text
+assets/alba-port.mp4 filter=lfs diff=lfs merge=lfs -text
+assets/sofia-esp.mp4 filter=lfs diff=lfs merge=lfs -text
