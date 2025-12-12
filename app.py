@@ -8,6 +8,7 @@ snapshot_download(
     repo_id = "alexnasa/outofsync",
     local_dir = "./outofsync"  
 )
+
 sh("cd outofsync && pip install . && cd ..")
 sh("pip uninstall onnxruntime onnxruntime-gpu -y && pip install onnxruntime-gpu")
 
@@ -1082,25 +1083,25 @@ with gr.Blocks(css=css) as demo:
                 cached_examples = gr.Examples(                    
                     examples=[ 
                         [
-                            "alica-por-2.mp4",
+                            "assets/alica-por-2.mp4",
                             True,
                             10
                         ],
 
                         [
-                            "ana-es.mp4",
+                            "assets/ana-es.mp4",
                             True,
                             10
                         ],
 
                         [
-                            "elena-es.mp4",
+                            "assets/elena-es.mp4",
                             True,
                             10
                         ],
             
                         [
-                            "monica-ita.mp4",
+                            "assets/monica-ita.mp4",
                             True,
                             10
                         ],
