@@ -1030,7 +1030,7 @@ with gr.Blocks(css=css) as demo:
             """
             <div style="text-align: center;">
                 <p style="font-size:16px; display: inline; margin: 0;">
-                    Translate and lipsync your clips to English
+                    Translate and lipsync your clips from any language to English
                 </p>
             </div>
             <div style="text-align: center;">
