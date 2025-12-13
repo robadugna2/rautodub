@@ -559,29 +559,29 @@ def build_srt(segments: List[Dict], audio_wav: str, out_srt_path: str):
     with open(out_srt_path, "w", encoding="utf-8") as f:
         f.write(srt.compose(subtitles))
 
-def translate_video(video_file, duration, session_id = None):
+def translate_video(video_file, duration, session_id = None, progress=gr.Progress(track_tqdm=True)):
 
     if video_file is None:
         raise gr.Error("Please upload a clip.")
 
-    return process_video(video_file, False, duration, session_id)
+    return process_video(video_file, False, duration, session_id, progress)
 
-def translate_lipsync_video(video_file, duration, session_id = None):
+def translate_lipsync_video(video_file, duration, session_id = None, progress=gr.Progress(track_tqdm=True)):
 
     if video_file is None:
         raise gr.Error("Please upload a clip.")
     
-    return process_video(video_file, True, duration, session_id)
+    return process_video(video_file, True, duration, session_id, progress)
 
 
-def run_example(video_file, allow_lipsync, duration, session_id = None):
+def run_example(video_file, allow_lipsync, duration, session_id = None, progress=gr.Progress(track_tqdm=True)):
 
     with timer("processed"):
-        result = process_video(video_file, allow_lipsync, duration, session_id)
+        result = process_video(video_file, allow_lipsync, duration, session_id, progress)
 
     return result
 
-def get_duration(video_file, allow_lipsync, duration, session_id):
+def get_duration(video_file, allow_lipsync, duration, session_id, progress):
 
     if allow_lipsync:
         if duration <= 3:
@@ -598,7 +598,7 @@ def get_duration(video_file, allow_lipsync, duration, session_id):
         return 40
         
 @spaces.GPU(duration=get_duration)
-def process_video(video_file, allow_lipsync, duration, session_id = None):
+def process_video(video_file, allow_lipsync, duration, session_id = None, progress=gr.Progress(track_tqdm=True)):
     """
     Gradio callback:
     - video_file: temp file object/path from Gradio
