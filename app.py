@@ -1064,7 +1064,11 @@ with gr.Blocks(css=css) as demo:
 
                 uncached_examples = gr.Examples(                    
                     examples=[ 
-            
+
+                        [
+                            "assets/popup-2.mp4",
+                        ],
+                        
                         [
                             "assets/sofia-esp.mp4",
                         ],
