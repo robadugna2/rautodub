@@ -1169,4 +1169,4 @@ with gr.Blocks(css=css) as demo:
 if __name__ == "__main__":
     demo.unload(cleanup)
     demo.queue()
-    demo.launch()
+    demo.launch(ssr_mode=False)
