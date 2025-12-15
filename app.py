@@ -1149,7 +1149,7 @@ with gr.Blocks(css=css) as demo:
                     fn=run_example,
                     inputs=[video_input, lipsync, duration],
                     outputs=[video_output, srt_output, vocal_16k_output],
-                    cache_examples=False
+                    cache_examples=True
                     )
         
 
