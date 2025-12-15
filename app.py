@@ -1052,7 +1052,7 @@ with gr.Blocks(css=css) as demo:
             with gr.Column(elem_id="step-column"):
                 gr.HTML("""
                 <div>
-                    <span style="font-size: 24px;">1. Upload a Video</span><br>
+                    <span style="font-size: 24px;">1. Upload or Record a Video</span><br>
                 </div>
                 """)
 
