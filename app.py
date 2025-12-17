@@ -4,12 +4,6 @@ from huggingface_hub import snapshot_download, hf_hub_download
 
 def sh(cmd): subprocess.check_call(cmd, shell=True)
 
-snapshot_download(
-    repo_id = "alexnasa/outofsync",
-    local_dir = "./outofsync"  
-)
-
-sh("cd outofsync && pip install . && cd ..")
 sh("pip uninstall onnxruntime onnxruntime-gpu -y && pip install onnxruntime-gpu")
 
 import os
@@ -94,7 +88,6 @@ snapshot_download("IndexTeam/IndexTTS-2", local_dir=os.path.join(current_dir,"ch
 
 dnr_model = tigersound.look2hear.models.TIGERDNR.from_pretrained("JusperLee/TIGER-DnR").to("cuda").eval()
 
-sh(f"pip install --no-deps git+https://github.com/OutofAi/index-tts.git")
 
 from indextts.infer_v2 import IndexTTS2
 
@@ -1030,7 +1023,7 @@ with gr.Blocks(css=css) as demo:
             """
             <div style="text-align: center;">
                 <p style="font-size:16px; display: inline; margin: 0;">
-                    Translate and lipsync your clips to English
+                    Translate and lipsync your clips from any language to English
                 </p>
             </div>
             <div style="text-align: center;">
@@ -1052,7 +1045,7 @@ with gr.Blocks(css=css) as demo:
             with gr.Column(elem_id="step-column"):
                 gr.HTML("""
                 <div>
-                    <span style="font-size: 24px;">1. Upload a Video</span><br>
+                    <span style="font-size: 24px;">1. Upload or Record a Video</span><br>
                 </div>
                 """)
 
@@ -1064,7 +1057,11 @@ with gr.Blocks(css=css) as demo:
 
                 uncached_examples = gr.Examples(                    
                     examples=[ 
-            
+
+                        [
+                            "assets/popup-2.mp4",
+                        ],
+                        
                         [
                             "assets/sofia-esp.mp4",
                         ],
@@ -1142,7 +1139,6 @@ with gr.Blocks(css=css) as demo:
 
             
                     ],
-                    label="Cached Examples",
                     fn=run_example,
                     inputs=[video_input, lipsync, duration],
                     outputs=[video_output, srt_output, vocal_16k_output],
@@ -1166,4 +1162,4 @@ with gr.Blocks(css=css) as demo:
 if __name__ == "__main__":
     demo.unload(cleanup)
     demo.queue()
-    demo.launch()
+    demo.launch(ssr_mode=False)

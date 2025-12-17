@@ -1,5 +1,5 @@
 
-from outofsync.latentsync.pipelines.lipsync_pipeline import LipsyncPipeline
+from latentsync.pipelines.lipsync_pipeline import LipsyncPipeline
 import torch
 
 pipeline = LipsyncPipeline(
