@@ -1,4 +1,5 @@
 # ByteDance/LatentSync
+# ByteDance/LatentSync-1.6
 from latentsync.pipelines.lipsync_pipeline import LipsyncPipeline
 import torch
 
