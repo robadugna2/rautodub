@@ -1,4 +1,4 @@
-
+# ByteDance/LatentSync
 from latentsync.pipelines.lipsync_pipeline import LipsyncPipeline
 import torch
 
@@ -27,5 +27,6 @@ def apply_lipsync(video_input_path, audio_path, video_out_path):
         width=256,
         height=256,
     )
+    torch.cuda.empty_cache()
 
     return video_out_path
