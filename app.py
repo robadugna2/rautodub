@@ -1036,7 +1036,6 @@ with gr.Blocks(css=css) as demo:
                 <a href="https://huggingface.co/alexnasa" style="display: inline-block; vertical-align: middle; margin-left: 0.5em;">
                     <img src="https://img.shields.io/badge/🤗-Follow Me-yellow.svg">
                 </a>
-                <a href="https://www.buymeacoffee.com/outofai" style="display: inline-block; vertical-align: middle; margin-left: 0.5em;" target="_blank"><img src="https://img.shields.io/badge/-buy_me_a%C2%A0coffee-red?logo=buy-me-a-coffee" alt="Buy Me A Coffee"></a>
             </div>
             """
         )
