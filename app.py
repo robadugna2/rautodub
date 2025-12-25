@@ -74,14 +74,12 @@ import math
 from datetime import timedelta
 import torchaudio
 import tigersound.look2hear.models
+from FastAudioSR import FASR
+import librosa
 
-# @spaces.GPU()
-# def print_ort():
+file_path = hf_hub_download(repo_id="YatharthS/FlashSR", filename="upsampler.pth", local_dir=".")
+upsampler = FASR(file_path)
 
-#     import onnxruntime as ort
-#     print(ort.get_available_providers())
-
-# print_ort()
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 snapshot_download("IndexTeam/IndexTTS-2", local_dir=os.path.join(current_dir,"checkpoints"))
@@ -887,19 +885,40 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
 
     video_out = output_dir + "/output_with_lipsync.mp4"
 
+    audio_in_upsampled = output_dir + "/final_output_upsampled.wav"
+
+    y, _ = librosa.load(audio_in, sr=16000)
+    lowres_wav = torch.from_numpy(y).unsqueeze(0)
+    
+    new_wav = upsampler.run(lowres_wav)
+    
+    new_wav = torch.as_tensor(new_wav)
+    if new_wav.dim() == 1:
+        new_wav = new_wav.unsqueeze(0)
+    elif new_wav.dim() == 2 and new_wav.size(0) != 1:
+        new_wav = new_wav[0].unsqueeze(0)
+    elif new_wav.dim() == 3:
+        new_wav = new_wav[0]
+    
+    new_wav = new_wav.contiguous().to(torch.float32).cpu()
+    new_wav = torch.clamp(new_wav, -1.0, 1.0)
+    
+    torchaudio.save(audio_in_upsampled, new_wav, 48000)
+
     
     cmd = [
         "ffmpeg",
         "-loglevel", "error",
         "-y",               # overwrite output file
         "-i", lipsynced_video,     # input video
-        "-i", audio_in,     # new audio
+        "-i", audio_in_upsampled,     # new audio
         "-c:v", "copy",     # do not re-encode video
         "-map", "0:v:0",    # take video from input 0
         "-map", "1:a:0",    # take audio from input 1
         "-shortest",        # stop when either track ends
         video_out,
     ]
+
 
     subprocess.run(cmd, check=True)
 
