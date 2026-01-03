@@ -1135,6 +1135,12 @@ with gr.Blocks(css=css) as demo:
                         ],
 
                         [
+                            "assets/koji.mp4",
+                            True,
+                            60
+                        ],
+
+                        [
                             "assets/elena-es.mp4",
                             True,
                             10
