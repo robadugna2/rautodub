@@ -585,8 +585,17 @@ def get_duration(video_file, allow_lipsync, duration, session_id, progress):
             return 120
         elif duration <= 30:
             return 150
+        elif duration <= 40:
+            return 180
+        elif duration <= 50:
+            return 210
+        elif duration <= 60:
+            return 240
     else:
-        return 40
+        if duration <= 30:
+            return 40
+        else:
+            return 60
         
 @spaces.GPU(duration=get_duration)
 def process_video(video_file, allow_lipsync, duration, session_id = None, progress=gr.Progress(track_tqdm=True)):
@@ -1071,7 +1080,7 @@ with gr.Blocks(css=css) as demo:
                     label="OG Clip",
                     height=512
                 )
-                duration = gr.Slider(5, 30, 10, step=1, label="Duration(s)")
+                duration = gr.Slider(5, 60, 10, step=1, label="Duration(s)")
 
                 uncached_examples = gr.Examples(                    
                     examples=[ 
