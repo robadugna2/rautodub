@@ -860,8 +860,8 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
         bg = bg[:len(timeline)]
         
     
-        bg = bg + 6
-        eff = eff + 6
+        bg = bg + 4
+        eff = eff + 4
     
         eff_timeline = eff.overlay(timeline)
         final_audio = bg.overlay(eff_timeline)
