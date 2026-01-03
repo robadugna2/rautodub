@@ -1136,7 +1136,7 @@ with gr.Blocks(css=css) as demo:
 
                         [
                             "assets/koji.mp4",
-                            True,
+                            False,
                             60
                         ],
 
