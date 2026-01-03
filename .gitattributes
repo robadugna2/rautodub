@@ -57,3 +57,4 @@ assets/monica-ita.mp4 filter=lfs diff=lfs merge=lfs -text
 assets/alba-port.mp4 filter=lfs diff=lfs merge=lfs -text
 assets/sofia-esp.mp4 filter=lfs diff=lfs merge=lfs -text
 assets/lena-de.mp4 filter=lfs diff=lfs merge=lfs -text
+assets/koji.mp4 filter=lfs diff=lfs merge=lfs -text
