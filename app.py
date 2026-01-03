@@ -595,7 +595,7 @@ def get_duration(video_file, allow_lipsync, duration, session_id, progress):
         if duration <= 30:
             return 40
         else:
-            return 60
+            return 80
         
 @spaces.GPU(duration=get_duration)
 def process_video(video_file, allow_lipsync, duration, session_id = None, progress=gr.Progress(track_tqdm=True)):
