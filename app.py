@@ -38,6 +38,12 @@ from pathlib import Path
 from pydub import AudioSegment
 import math
 
+import re
+import tempfile
+from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
+import subprocess
+
 # Collect all classes from pyannote.audio.core.task
 safe_globals = [torch.torch_version.TorchVersion]
 for name, obj in inspect.getmembers(task_module):
@@ -105,6 +111,80 @@ import logging
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
+
+def _safe_name(s: str) -> str:
+    s = s.strip()
+    s = re.sub(r"[^a-zA-Z0-9._-]+", "_", s)
+    return s[:80] if s else "tiktok"
+
+
+
+def download_tiktok_video(url: str) -> str:
+
+    if not url or not url.strip():
+        raise gr.Error("Please paste a TikTok link.")
+
+    url = url.strip()
+
+    out_dir = Path(tempfile.mkdtemp(prefix="tiktok_dl_"))
+    outtmpl = str(out_dir / "%(title).80s_%(id)s.%(ext)s")
+
+    ydl_opts = {
+        "format": "bv*+ba/best",
+        "merge_output_format": None,
+        "postprocessors": [],
+        "concurrent_fragment_downloads": 1,
+        "ffmpeg_args": ["-threads", "2"],
+        "outtmpl": outtmpl,
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+    }
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+
+            # yt-dlp can return a dict with requested_downloads or a direct filename
+            # We’ll try a few safe ways to get the final filepath.
+            fp = None
+
+            if isinstance(info, dict):
+                # Most common: requested_downloads contains the output file
+                req = info.get("requested_downloads") or []
+                if req and isinstance(req, list) and isinstance(req[0], dict):
+                    fp = req[0].get("filepath") or req[0].get("filename")
+
+                # Another common: ydl.prepare_filename
+                if not fp:
+                    fp = ydl.prepare_filename(info)
+
+            if not fp:
+                # As a fallback, pick the newest file in our temp dir
+                files = list(out_dir.glob("*"))
+                if not files:
+                    raise gr.Error("Download finished but no file was found.")
+                fp = str(max(files, key=lambda p: p.stat().st_mtime))
+
+            # Ensure Gradio can read it
+            if not os.path.exists(fp):
+                raise gr.Error("Downloaded file path does not exist.")
+
+
+            return fp
+
+
+    except DownloadError as e:
+        msg = str(e)
+        raise gr.Error(
+            "Download failed. TikTok may be blocking requests.\n\n"
+            "Try:\n"
+            "• Using a different TikTok link\n"
+            "• Providing a cookies.txt export (logged-in) in Advanced\n\n"
+            f"Details: {msg[:800]}"
+        )
 
 def split_subtitles_max_duration(
     subtitles, 
@@ -550,18 +630,56 @@ def build_srt(segments: List[Dict], audio_wav: str, out_srt_path: str):
     with open(out_srt_path, "w", encoding="utf-8") as f:
         f.write(srt.compose(subtitles))
 
-def translate_video(video_file, duration, session_id = None, progress=gr.Progress(track_tqdm=True)):
+def resolve_video_input(x: str):
+    """
+    Accepts:
+      - TikTok URL (http/https) -> downloads and returns filepath
+      - Local filepath -> returns it (if exists)
+      - Gradio dict {"name"/"path"} -> extracts it
+    """
+    if x is None:
+        raise gr.Error("Please provide a TikTok URL or a video file/path.")
 
-    if video_file is None:
-        raise gr.Error("Please upload a clip.")
+    # If gradio gives a dict (depends on component/version)
+    if isinstance(x, dict):
+        x = x.get("name") or x.get("path")
 
+    if not isinstance(x, str):
+        raise gr.Error("Invalid input. Provide a TikTok URL or a video file/path.")
+
+    x = x.strip()
+    if not x:
+        raise gr.Error("Please provide a TikTok URL or a video file/path.")
+
+    # URL -> download
+    if re.match(r"^https?://", x, re.IGNORECASE):
+        return download_tiktok_video(x)
+
+    # Otherwise treat as local path
+    if not os.path.exists(x):
+        raise gr.Error("Video path does not exist. Provide a valid local path or a TikTok URL.")
+
+    return x
+
+
+def translate_video(video_file, url_or_path, duration, session_id=None, progress=gr.Progress(track_tqdm=True)):
+
+    if video_file == None:
+        url_or_path = url_or_path
+    else:
+        url_or_path = video_file
+    video_file = resolve_video_input(url_or_path)
     return process_video(video_file, False, duration, session_id, progress)
 
-def translate_lipsync_video(video_file, duration, session_id = None, progress=gr.Progress(track_tqdm=True)):
 
-    if video_file is None:
-        raise gr.Error("Please upload a clip.")
-    
+def translate_lipsync_video(video_file, url_or_path, duration, session_id=None, progress=gr.Progress(track_tqdm=True)):
+
+    if video_file == None:
+        url_or_path = url_or_path
+    else:
+        url_or_path = video_file
+        
+    video_file = resolve_video_input(url_or_path)
     return process_video(video_file, True, duration, session_id, progress)
 
 
@@ -575,27 +693,9 @@ def run_example(video_file, allow_lipsync, duration, session_id = None, progress
 def get_duration(video_file, allow_lipsync, duration, session_id, progress):
 
     if allow_lipsync:
-        if duration <= 3:
-            return 30
-        elif duration <= 5:
-            return 60
-        elif duration <= 10:
-            return 90
-        elif duration <= 20:
-            return 120
-        elif duration <= 30:
-            return 150
-        elif duration <= 40:
-            return 180
-        elif duration <= 50:
-            return 210
-        elif duration <= 60:
-            return 240
+        return (60 + 30 * (duration) // 5)
     else:
-        if duration <= 30:
-            return 40
-        else:
-            return 80
+        return (60 + 20 * (duration) // 30)
         
 @spaces.GPU(duration=get_duration)
 def process_video(video_file, allow_lipsync, duration, session_id = None, progress=gr.Progress(track_tqdm=True)):
@@ -869,8 +969,8 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
         bg = bg[:len(timeline)]
         
     
-        bg = bg + 4
-        eff = eff + 4
+        bg = bg + 2
+        eff = eff + 2
     
         eff_timeline = eff.overlay(timeline)
         final_audio = bg.overlay(eff_timeline)
@@ -1029,6 +1129,20 @@ css = """
     }
     """
 
+def _fmt_seconds(sec: int) -> str:
+    sec = int(sec)
+    return f"{sec}s"
+
+def compute_etas(duration_value: int):
+    # get_duration signature: (video_file, allow_lipsync, duration, session_id, progress)
+    # We only need allow_lipsync + duration; pass placeholders for the rest.
+    t_no = get_duration(None, False, int(duration_value), None, None)
+    t_ls = get_duration(None, True,  int(duration_value), None, None)
+
+    md_no = f"**Estimated time (Translate):** `{_fmt_seconds(t_no)}`"
+    md_ls = f"**Estimated time (Translate + Lipsync):** `{_fmt_seconds(t_ls)}`"
+    return md_no, md_ls
+    
 def cleanup(request: gr.Request):
 
     sid = request.session_hash
@@ -1070,17 +1184,35 @@ with gr.Blocks(css=css) as demo:
 
         with gr.Row():
             with gr.Column(elem_id="step-column"):
-                gr.HTML("""
-                <div>
-                    <span style="font-size: 24px;">1. Upload or Record a Video</span><br>
-                </div>
-                """)
 
-                video_input = gr.Video(
-                    label="OG Clip",
-                    height=512
-                )
-                duration = gr.Slider(5, 60, 10, step=1, label="Duration(s)")
+                with gr.Tab("Video"):
+
+                     with gr.Column():
+
+                        gr.HTML("""
+                            <div>
+                                <span style="font-size: 24px;">1. Upload a Video</span><br>
+                            </div>
+                            """)
+                        
+                        video_input = gr.Video(
+                            label="OG Clip",
+                            height=512
+                        )
+                         
+                with gr.Tab("TikTok URL"):
+
+                    with gr.Column():
+
+                        gr.HTML("""
+                            <div>
+                                <span style="font-size: 24px;">1. Paste TikTok link Here</span><br>
+                            </div>
+                            """)
+                        
+                        url_in = gr.Textbox(label="TikTok URL", placeholder="https://www.tiktok.com/@user/video/...")
+
+                duration = gr.Slider(5, 120, 10, step=1, label="Duration(s)")
 
                 uncached_examples = gr.Examples(                    
                     examples=[ 
@@ -1113,6 +1245,10 @@ with gr.Blocks(css=css) as demo:
 
                 video_output = gr.Video(label="Output", height=512)
                 lipsync = gr.Checkbox(label="Lipsync", value=False, visible=False)
+
+                eta_translate_md = gr.Markdown("")
+                eta_lipsync_md = gr.Markdown("")
+
                 translate_btn = gr.Button("🤹‍♂️ Translate")
                 translate_lipsync_btn = gr.Button("🤹‍♂️ Translate + 💋 Lipsync", variant='primary', elem_classes="button-gradient")
         
@@ -1181,15 +1317,22 @@ with gr.Blocks(css=css) as demo:
 
     translate_btn.click(
         fn=translate_video,
-        inputs=[video_input, duration, session_state],
+        inputs=[video_input, url_in, duration, session_state],
         outputs=[video_output, srt_output, vocal_16k_output],
     )
     
     translate_lipsync_btn.click(
         fn=translate_lipsync_video,
-        inputs=[video_input, duration, session_state],
+        inputs=[video_input, url_in, duration, session_state],
         outputs=[video_output, srt_output, vocal_16k_output],
     )
+
+    duration.change(
+        fn=compute_etas,
+        inputs=[duration],
+        outputs=[eta_translate_md, eta_lipsync_md],
+    )
+
 
 
 if __name__ == "__main__":

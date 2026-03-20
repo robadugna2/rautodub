@@ -67,6 +67,7 @@ onnxruntime-gpu==1.21.0
 
 # --- Language-specific packages ---
 jieba==0.42.1
+yt-dlp
 
 # --- Environment-specific ---
 WeTextProcessing; platform_machine != "Darwin"
