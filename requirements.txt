@@ -8,7 +8,7 @@ indextts @ git+https://github.com/OutofAi/index-tts-batch.git
 latentsync @ git+https://github.com/OutofAi/LatentSync-batch.git
 FastAudioSR @ git+https://github.com/ysharma3501/FlashSR.git
 
-pyannote.audio<4.0.3
+pyannote.audio
 ctranslate2
 faster-whisper
 pydub==0.25.1
