@@ -4,7 +4,6 @@ torchvision==0.23.0
 triton
 deepspeed==0.17.1
 # flash-attn-3 @ https://huggingface.co/alexnasa/flash-attn-3/resolve/main/128/flash_attn_3-3.0.0b1-cp39-abi3-linux_x86_64.whl
-flash-attn
 indextts @ git+https://github.com/OutofAi/index-tts-batch.git
 latentsync @ git+https://github.com/OutofAi/LatentSync-batch.git
 FastAudioSR @ git+https://github.com/ysharma3501/FlashSR.git
