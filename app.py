@@ -3,7 +3,8 @@ import subprocess
 from huggingface_hub import snapshot_download, hf_hub_download
 
 def sh(cmd): subprocess.check_call(cmd, shell=True)
-
+    
+sh("pip install flash-attn --no-build-isolation")
 sh("pip uninstall onnxruntime onnxruntime-gpu -y && pip install onnxruntime-gpu")
 
 import os
