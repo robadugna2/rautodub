@@ -694,11 +694,11 @@ def run_example(video_file, allow_lipsync, duration, session_id = None, progress
 def get_duration(video_file, allow_lipsync, duration, session_id, progress):
 
     if allow_lipsync:
-        return (60 + 30 * (duration) // 5)
+        return (60 + 30 * (duration) // 5) // 2
     else:
-        return (60 + 20 * (duration) // 30)
+        return (60 + 20 * (duration) // 30) // 2
         
-@spaces.GPU(duration=get_duration)
+@spaces.GPU(duration=get_duration, size='xlarge')
 def process_video(video_file, allow_lipsync, duration, session_id = None, progress=gr.Progress(track_tqdm=True)):
     """
     Gradio callback:
