@@ -485,18 +485,22 @@ MODEL_SIZE = "large-v3"            # CHANGED from "medium" — critical for Am/T
 MIN_SEGMENT_SECONDS = 0.5        # only transcribe segments longer than this
 
 # If your pyannote pipeline needs a HF token, set it here or via env var:
-# HUGGINGFACE_TOKEN = "hf_..."
-HF_TOKEN = os.getenv("HF_TOKEN", None)
+HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
 
 # --------------------
 # LOAD GLOBAL MODELS (ONCE)
 # --------------------
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-print(f"Loading pyannote diarization model...")
-diarization_pipeline = Pipeline.from_pretrained(
-    "pyannote/speaker-diarization-3.1"
-)
+diarization_pipeline = None
+try:
+    print(f"Loading pyannote diarization model (token provided: {'Yes' if HF_TOKEN else 'No'})...")
+    diarization_pipeline = Pipeline.from_pretrained(
+        "pyannote/speaker-diarization-3.1",
+        use_auth_token=HF_TOKEN
+    )
+except Exception as e:
+    print(f"⚠ Failed to pre-load Pyannote Speaker Diarization pipeline: {e}")
 
 # --------------------
 # HELPERS
@@ -565,6 +569,29 @@ def extract_audio_to_wav(input_video: str, output_dir: str):
 
 def diarize_audio(audio_path: str) -> List[Dict]:
     """Run pyannote diarization and return segments."""
+    global diarization_pipeline
+
+    if diarization_pipeline is None:
+        # Retry in case HF_TOKEN was set late
+        token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
+        try:
+            print(f"Retrying to load pyannote diarization model...")
+            diarization_pipeline = Pipeline.from_pretrained(
+                "pyannote/speaker-diarization-3.1",
+                use_auth_token=token
+            )
+        except Exception as e:
+            print(f"⚠ Failed to load diarization pipeline: {e}")
+
+    if diarization_pipeline is None:
+        raise ValueError(
+            "Pyannote Speaker Diarization pipeline is not initialized. "
+            "This model is gated. To use it, please:\n"
+            "1. Visit https://hf.co/pyannote/speaker-diarization-3.1 and accept the terms.\n"
+            "2. Visit https://hf.co/pyannote/segmentation-3.0 and accept the terms.\n"
+            "3. Go to https://hf.co/settings/tokens to create an access token.\n"
+            "4. Start the studio/app with the HF_TOKEN environment variable set (e.g. export HF_TOKEN=your_token)."
+        )
 
     diarization_pipeline.to(torch.device(device))
 
