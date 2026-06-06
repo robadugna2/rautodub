@@ -154,10 +154,15 @@ if os.path.exists(_cfg_path):
         print("  ℹ Renaming latest.pth → gpt.pth (config expects gpt.pth)")
         os.rename(_gpt_actual, _gpt_expected)
 
+    # Fix 3: Prevent QwenEmotion crash (indextts bug where os.path.join fails on null)
+    if _conf.get("qwen_emo_path") is None:
+        _conf["qwen_emo_path"] = "dummy_qwen_path"
+        _conf_changed = True
+
     if _conf_changed:
         with open(_cfg_path, "w") as f:
             yaml.safe_dump(_conf, f)
-        print("  ✓ config_amharic.yaml patched (tokenizer path fixed).")
+        print("  ✓ config_amharic.yaml patched (tokenizer path & qwen bug fixed).")
 
 # Copy checkpoints to torch hub cache (some models expect files there)
 _torch_hub_dst = os.path.expanduser("~/.cache/torch/hub/checkpoints")
@@ -175,6 +180,22 @@ print("✓ Done copying checkpoints to torch hub cache!")
 
 dnr_model = tigersound.look2hear.models.TIGERDNR.from_pretrained("JusperLee/TIGER-DnR").to("cuda").eval()
 
+# ==========================================================================
+# MONKEY-PATCH indextts QwenEmotion BUG
+# indextts forcefully loads QwenEmotion. We bypass it to save VRAM.
+# ==========================================================================
+try:
+    import indextts.infer_v2
+    class DummyQwenEmotion:
+        def __init__(self, *args, **kwargs):
+            pass
+        def inference(self, text):
+            return {}
+    # Inject it before IndexTTS2 tries to use it
+    indextts.infer_v2.QwenEmotion = DummyQwenEmotion
+    print("✓ Monkey-patched QwenEmotion to prevent crash.")
+except ImportError:
+    pass
 
 from indextts.infer_v2 import IndexTTS2
 
