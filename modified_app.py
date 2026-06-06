@@ -93,8 +93,8 @@ for _p in _cudnn_paths:
 if not _cudnn_loaded:
     print("⚠ cuDNN CNN library not found at expected paths — may still work via LD_LIBRARY_PATH.")
 
-# print(os.environ.get('LD_LIBRARY_PATH', ''))
-import torch, ctranslate2, os
+# (torch and os already imported above — ctranslate2 is the new import here)
+import ctranslate2
 
 import numpy as np
 from pydub import AudioSegment
@@ -103,11 +103,7 @@ from pyannote.audio import Pipeline
 from pyannote.audio.pipelines.utils.hook import ProgressHook
 import gradio as gr
 
-from pydub import AudioSegment
 import srt
-import io
-from pydub import AudioSegment
-import math
 from datetime import timedelta
 import torchaudio
 import tigersound.look2hear.models
@@ -474,8 +470,7 @@ def split_text_into_chunks(text, max_chars=400):
 
     return chunks
 
-def sh(cmd): subprocess.check_call(cmd, shell=True)
-    
+# sh() is defined at the top of the file (safe version with try/except)
 # sh("find / -name \"libcudnn*\" 2>/dev/null")
 # --------------------
 # CONFIG
