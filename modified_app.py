@@ -2,35 +2,47 @@
 import subprocess
 from huggingface_hub import snapshot_download, hf_hub_download
 
-def sh(cmd): subprocess.check_call(cmd, shell=True)
-    
+def sh(cmd):
+    """Run a shell command, printing errors but not crashing the whole app."""
+    try:
+        subprocess.check_call(cmd, shell=True)
+    except subprocess.CalledProcessError as e:
+        print(f"⚠ Shell command failed (non-fatal): {cmd}\n  {e}")
+
+# --- Install flash-attn (may take a while on first run) ---
 sh("pip install flash-attn --no-build-isolation")
-sh("pip uninstall onnxruntime onnxruntime-gpu -y && pip install onnxruntime-gpu")
+# --- Fix onnxruntime GPU ---
+sh("pip uninstall onnxruntime onnxruntime-gpu -y")
+sh("pip install onnxruntime-gpu")
 
 import os
 import shutil
 
-src = "checkpoints"  # your source folder
-dst = "/home/user/.cache/torch/hub/checkpoints"
+# ==========================================================================
+# HuggingFace Spaces compatibility: `spaces` module only exists on HF Spaces.
+# On Lightning AI / local, we create a no-op fallback.
+# ==========================================================================
+try:
+    import spaces
+    _ON_HF_SPACES = True
+except ImportError:
+    _ON_HF_SPACES = False
 
-# Create destination folder if it doesn't exist
-os.makedirs(dst, exist_ok=True)
+    class _SpacesFallback:
+        """No-op fallback for the HuggingFace `spaces` module."""
+        @staticmethod
+        def GPU(*args, **kwargs):
+            """No-op decorator — on Lightning AI the GPU is always available."""
+            def decorator(fn):
+                return fn
+            # Handle @spaces.GPU(duration=...) and @spaces.GPU
+            if len(args) == 1 and callable(args[0]):
+                return args[0]
+            return decorator
 
-# Copy each item from src → dst
-for item in os.listdir(src):
-    s = os.path.join(src, item)
-    d = os.path.join(dst, item)
+    spaces = _SpacesFallback()
+    print("ℹ Running outside HuggingFace Spaces — GPU decorator disabled.")
 
-    if os.path.isdir(s):
-        # Copy directory
-        shutil.copytree(s, d, dirs_exist_ok=True)
-    else:
-        # Copy file
-        shutil.copy2(s, d)
-
-print("✓ Done copying checkpoints!")
-
-import spaces
 import io
 import torch
 import inspect
@@ -59,9 +71,27 @@ import time
 from time_util import timer
 import os, pathlib, sys, ctypes
 import uuid
-# preload the CNN component
 
-ctypes.CDLL("/usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib/libcudnn_cnn.so.9")
+# ==========================================================================
+# Preload cuDNN CNN component — path varies by Python version / platform.
+# ==========================================================================
+_cudnn_paths = [
+    "/usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib/libcudnn_cnn.so.9",
+    "/usr/local/lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_cnn.so.9",
+    "/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib/libcudnn_cnn.so.9",
+]
+_cudnn_loaded = False
+for _p in _cudnn_paths:
+    if os.path.exists(_p):
+        try:
+            ctypes.CDLL(_p)
+            _cudnn_loaded = True
+            print(f"✓ Loaded cuDNN from {_p}")
+            break
+        except OSError:
+            pass
+if not _cudnn_loaded:
+    print("⚠ cuDNN CNN library not found at expected paths — may still work via LD_LIBRARY_PATH.")
 
 # print(os.environ.get('LD_LIBRARY_PATH', ''))
 import torch, ctranslate2, os
@@ -102,16 +132,44 @@ MULTILINGUAL_MODEL_REPO = "robadugna/rtts2"
 TTS_CHECKPOINT_DIR = os.path.join(current_dir, "checkpoints_multilingual")
 snapshot_download(MULTILINGUAL_MODEL_REPO, local_dir=TTS_CHECKPOINT_DIR)
 
+# ---- Post-download fixups for config_amharic.yaml ----
 import yaml
 _cfg_path = os.path.join(TTS_CHECKPOINT_DIR, "config_amharic.yaml")
 if os.path.exists(_cfg_path):
     with open(_cfg_path, "r") as f:
         _conf = yaml.safe_load(f)
+    _conf_changed = False
+
+    # Fix 1: Tokenizer path — config says "../tokenizers/am_om_ti_extended.model"
+    # but the file is downloaded flat into TTS_CHECKPOINT_DIR.
     if "dataset" in _conf and "bpe_model" in _conf["dataset"]:
-        # Update path to point to the downloaded tokenizer in the same directory
         _conf["dataset"]["bpe_model"] = os.path.join(TTS_CHECKPOINT_DIR, "am_om_ti_extended.model")
-    with open(_cfg_path, "w") as f:
-        yaml.safe_dump(_conf, f)
+        _conf_changed = True
+
+    # Fix 2: GPT checkpoint name — config says "gpt.pth" but the HF repo
+    # only has "latest.pth". Rename the file so IndexTTS2 can find it.
+    _gpt_expected = os.path.join(TTS_CHECKPOINT_DIR, "gpt.pth")
+    _gpt_actual = os.path.join(TTS_CHECKPOINT_DIR, "latest.pth")
+    if not os.path.exists(_gpt_expected) and os.path.exists(_gpt_actual):
+        print("  ℹ Renaming latest.pth → gpt.pth (config expects gpt.pth)")
+        os.rename(_gpt_actual, _gpt_expected)
+
+    if _conf_changed:
+        with open(_cfg_path, "w") as f:
+            yaml.safe_dump(_conf, f)
+        print("  ✓ config_amharic.yaml patched (tokenizer path fixed).")
+
+# Copy checkpoints to torch hub cache (some models expect files there)
+_torch_hub_dst = os.path.expanduser("~/.cache/torch/hub/checkpoints")
+os.makedirs(_torch_hub_dst, exist_ok=True)
+for _item in os.listdir(TTS_CHECKPOINT_DIR):
+    _s = os.path.join(TTS_CHECKPOINT_DIR, _item)
+    _d = os.path.join(_torch_hub_dst, _item)
+    if os.path.isdir(_s):
+        shutil.copytree(_s, _d, dirs_exist_ok=True)
+    elif not os.path.exists(_d):
+        shutil.copy2(_s, _d)
+print("✓ Done copying checkpoints to torch hub cache!")
 
 # ==========================================================================
 
