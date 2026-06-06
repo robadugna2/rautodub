@@ -89,17 +89,31 @@ upsampler = FASR(file_path)
 
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-snapshot_download("robadugna/rtts2", local_dir=os.path.join(current_dir,"checkpoints"))
+
+# ==========================================================================
+# ETHIOPIAN LANGUAGE MODIFICATION
+# ==========================================================================
+
+# SINGLE MULTILINGUAL MODEL
+# Replace with your actual HuggingFace repository name
+MULTILINGUAL_MODEL_REPO = "robadugna/rtts2"
+
+# Download checkpoint at startup
+TTS_CHECKPOINT_DIR = os.path.join(current_dir, "checkpoints_multilingual")
+snapshot_download(MULTILINGUAL_MODEL_REPO, local_dir=TTS_CHECKPOINT_DIR)
 
 import yaml
-_cfg_path = os.path.join(current_dir, "checkpoints", "config_amharic.yaml")
+_cfg_path = os.path.join(TTS_CHECKPOINT_DIR, "config_amharic.yaml")
 if os.path.exists(_cfg_path):
     with open(_cfg_path, "r") as f:
         _conf = yaml.safe_load(f)
     if "dataset" in _conf and "bpe_model" in _conf["dataset"]:
-        _conf["dataset"]["bpe_model"] = os.path.join(current_dir, "checkpoints", "am_om_ti_extended.model")
+        # Update path to point to the downloaded tokenizer in the same directory
+        _conf["dataset"]["bpe_model"] = os.path.join(TTS_CHECKPOINT_DIR, "am_om_ti_extended.model")
     with open(_cfg_path, "w") as f:
         yaml.safe_dump(_conf, f)
+
+# ==========================================================================
 
 dnr_model = tigersound.look2hear.models.TIGERDNR.from_pretrained("JusperLee/TIGER-DnR").to("cuda").eval()
 
@@ -107,15 +121,61 @@ dnr_model = tigersound.look2hear.models.TIGERDNR.from_pretrained("JusperLee/TIGE
 from indextts.infer_v2 import IndexTTS2
 
 MODE = 'local'
-tts = IndexTTS2(model_dir="./checkpoints",
-                cfg_path=os.path.join("./checkpoints", "config_amharic.yaml"),
-                use_fp16=True,
-                use_deepspeed=False,
-                use_cuda_kernel=False,
-                )
 
+# LAZY-LOAD: Load the single multilingual TTS model on first use.
+_multilingual_tts_model = None
 
-os.environ["PROCESSED_RESULTS"] = f"{os.getcwd()}/proprocess_results"
+def get_tts_model(lang_code: str) -> IndexTTS2:
+    """Lazy-load and cache the single multilingual IndexTTS2 model."""
+    global _multilingual_tts_model
+    
+    if _multilingual_tts_model is not None:
+        return _multilingual_tts_model
+    
+    print("Loading multilingual IndexTTS2 model...")
+    _multilingual_tts_model = IndexTTS2(
+        model_dir=TTS_CHECKPOINT_DIR,
+        cfg_path=os.path.join(TTS_CHECKPOINT_DIR, "config_amharic.yaml"),
+        use_fp16=True,
+        use_deepspeed=False,
+        use_cuda_kernel=False,
+    )
+    print("  ✓ Multilingual model loaded!")
+    return _multilingual_tts_model
+
+# ==========================================================================
+# FREE TRANSLATION API (replaces NLLB — saves ~7GB VRAM!)
+# ==========================================================================
+import requests as http_req
+import json
+
+TRANSLATION_API_URL = "https://dev-mapiz.pantheonsite.io/ymigxf/Api/"
+
+# Human-readable target language names for the translation prompt
+TARGET_LANG_NAMES = {
+    "am":  "Amharic (አማርኛ)",
+    "tir": "Tigrinya (ትግርኛ)",
+    "om":  "Oromo (Afaan Oromoo)",
+}
+
+# Mapping from Gradio display names → internal language codes
+LANG_DISPLAY_TO_CODE = {
+    "Amharic (አማርኛ)":    "am",
+    "Tigrinya (ትግርኛ)":   "tir",
+    "Oromo (Afaan Oromoo)": "om",
+}
+
+def resolve_lang_code(target_lang: str) -> str:
+    """Convert a display name or raw code to a valid internal language code."""
+    if target_lang in LANG_DISPLAY_TO_CODE:
+        return LANG_DISPLAY_TO_CODE[target_lang]
+    if target_lang in TARGET_LANG_NAMES:
+        return target_lang  # Already a valid code
+    return "am"  # Fallback
+
+# ==========================================================================
+
+os.environ["PROCESSED_RESULTS"] = f"{os.getcwd()}/processed_results"
 
 from lipsync import apply_lipsync
 import logging
@@ -159,7 +219,7 @@ def download_tiktok_video(url: str) -> str:
             info = ydl.extract_info(url, download=True)
 
             # yt-dlp can return a dict with requested_downloads or a direct filename
-            # We’ll try a few safe ways to get the final filepath.
+            # We'll try a few safe ways to get the final filepath.
             fp = None
 
             if isinstance(info, dict):
@@ -296,21 +356,26 @@ def split_subtitles_max_duration(
 
     return new_subs
 
-
 def split_text_into_chunks(text, max_chars=400):
     """
     Rough splitter: breaks text into chunks <= max_chars, 
     preferring to split at sentence boundaries, then spaces.
+    Supports both Latin and Ethiopic (Ge'ez) punctuation.
     """
     text = text.strip()
     chunks = []
 
     while len(text) > max_chars:
         # Try to split at the last sentence end before max_chars
+        # Include Ethiopic punctuation: ። (full stop), ፧ (question), ፣ (comma)
         split_at = max(
             text.rfind(". ", 0, max_chars),
             text.rfind("! ", 0, max_chars),
             text.rfind("? ", 0, max_chars),
+            text.rfind("\u1362 ", 0, max_chars),   # ። Ethiopic full stop
+            text.rfind("\u1367 ", 0, max_chars),   # ፧ Ethiopic question mark
+            text.rfind("\u1363 ", 0, max_chars),   # ፣ Ethiopic comma
+            text.rfind("\u1364 ", 0, max_chars),   # ፤ Ethiopic semicolon
         )
 
         # If there was no sentence boundary, fall back to last space
@@ -330,14 +395,14 @@ def split_text_into_chunks(text, max_chars=400):
 
     return chunks
 
-
 def sh(cmd): subprocess.check_call(cmd, shell=True)
     
 # sh("find / -name \"libcudnn*\" 2>/dev/null")
 # --------------------
 # CONFIG
 # --------------------
-MODEL_SIZE = "medium"            # e.g. "small", "medium", "large-v2"
+# ETHIOPIAN MODIFICATION: Use large-v3 for much better Ethiopian language recognition
+MODEL_SIZE = "large-v3"            # CHANGED from "medium" — critical for Am/Tir/Om
 MIN_SEGMENT_SECONDS = 0.5        # only transcribe segments longer than this
 
 # If your pyannote pipeline needs a HF token, set it here or via env var:
@@ -419,7 +484,6 @@ def extract_audio_to_wav(input_video: str, output_dir: str):
     
     return audio_file, effect_file, background_file, audio_16k_file, vocal_file
 
-
 def diarize_audio(audio_path: str) -> List[Dict]:
     """Run pyannote diarization and return segments."""
 
@@ -443,7 +507,6 @@ def diarize_audio(audio_path: str) -> List[Dict]:
     segments.sort(key=lambda x: x["start"])
     return segments
 
-
 def chunk_to_float32(chunk: AudioSegment) -> np.ndarray:
     """Convert a pydub chunk to mono 16kHz float32 numpy array in [-1, 1]."""
     chunk = chunk.set_frame_rate(16000).set_channels(1)
@@ -459,18 +522,155 @@ def chunk_to_float32(chunk: AudioSegment) -> np.ndarray:
 
     return samples
 
+# ==========================================================================
+# ETHIOPIAN MODIFICATION: Translation Functions
+# ==========================================================================
+
+def detect_whisper_language(whisper_model, samples: np.ndarray) -> str:
+    """
+    Detect the language of the audio segment using Whisper.
+    Returns the ISO 639-1 language code (e.g., 'en', 'fr', 'es').
+    """
+    segments, info = whisper_model.transcribe(
+        samples,
+        beam_size=1,
+        vad_filter=False,
+    )
+    return info.language
+
+def translate_text_api(text: str, source_lang: str, target_lang_code: str) -> str:
+    """
+    Translate text to the target Ethiopian language using the free Mapiz API.
+    Uses OpenAI-compatible chat completions format.
+
+    Args:
+        text: The text to translate
+        source_lang: Whisper-detected language code (e.g., 'en', 'fr', 'es')
+        target_lang_code: One of 'am', 'tir', 'om'
+
+    Returns:
+        Translated text in the target Ethiopian script
+    """
+    if not text.strip():
+        return text
+
+    target_name = TARGET_LANG_NAMES.get(target_lang_code, "Amharic")
+    
+    system_prompt = (
+        f"You are a professional translator. "
+        f"Translate the following text from {source_lang} to {target_name}. "
+        f"Output ONLY the translated text, nothing else. "
+        f"Do not add quotes, explanations, or any extra text."
+    )
+
+    payload = {
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": text},
+        ],
+        "stream": False,
+        "temperature": 0.3,
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+    }
+
+    last_error = None
+    for attempt in range(3):
+        try:
+            resp = http_req.post(
+                TRANSLATION_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=30,
+            )
+
+            if resp.status_code == 200:
+                data = resp.json()
+                
+                # --- OpenAI-compatible response format ---
+                # {"choices": [{"message": {"content": "translated text"}}]}
+                if "choices" in data and len(data["choices"]) > 0:
+                    translated = data["choices"][0]["message"]["content"].strip()
+                    if translated:
+                        return translated
+
+                # --- Alternative: {"response": "translated text"} ---
+                if "response" in data:
+                    translated = data["response"].strip()
+                    if translated:
+                        return translated
+
+                # --- Alternative: {"text": "translated text"} ---
+                if "text" in data:
+                    translated = data["text"].strip()
+                    if translated:
+                        return translated
+
+                # --- Alternative: plain string in data ---
+                if isinstance(data, str) and data.strip():
+                    return data.strip()
+
+                last_error = f"API returned 200 but unexpected format: {str(data)[:200]}"
+                print(f"  ⚠ {last_error}")
+                
+            else:
+                last_error = f"API returned HTTP {resp.status_code}: {resp.text[:200]}"
+                print(f"  ⚠ {last_error}")
+
+        except http_req.exceptions.Timeout:
+            last_error = f"API timeout (attempt {attempt + 1}/3)"
+            print(f"  ⚠ {last_error}")
+            time.sleep(1)
+        except Exception as e:
+            last_error = f"API error (attempt {attempt + 1}/3): {e}"
+            print(f"  ⚠ {last_error}")
+            time.sleep(1)
+
+    # CRITICAL: Do NOT silently return English text — it will produce garbled TTS output.
+    # Instead, mark the failure clearly so downstream code can handle it.
+    print(f"  ✗ Translation FAILED for: {text[:80]} | Last error: {last_error}")
+    return f"[UNTRANSLATED] {text}"
+
+
+def test_translation_api():
+    """
+    DEBUG: Call this function standalone to test if the API works.
+    Usage: python modified_app.py --test-api
+    """
+    print("=" * 60)
+    print("TESTING TRANSLATION API")
+    print(f"Endpoint: {TRANSLATION_API_URL}")
+    print("=" * 60)
+
+    test_cases = [
+        ("Hello, how are you today?", "en", "am"),
+        ("The weather is beautiful.", "en", "am"),
+        ("Good morning everyone!", "en", "tir"),
+        ("I love this place.", "en", "om"),
+    ]
+
+    for text, src, tgt in test_cases:
+        print(f"\n  [{src} → {tgt}] \"{text}\"")
+        result = translate_text_api(text, src, tgt)
+        print(f"  → \"{result}\"")
+
+    print("\n" + "=" * 60)
+
+# NOTE: transcribe_segment_words_ethiopian was removed — its logic is now
+# consolidated into transcribe_segment_words() below.
 
 def transcribe_segment(whisper_model, samples: np.ndarray) -> str:
-    """Transcribe+translate a single segment with faster-whisper."""
+    """Transcribe a single segment with faster-whisper (ASR only, no translation)."""
     segment_text_parts = []
-
 
     segments, info = whisper_model.transcribe(
         samples,
         beam_size=1,
-        vad_filter=False,                # diarization already detected speech
-        condition_on_previous_text=True,  # independent segments
-        task="translate",                # translate to English
+        vad_filter=False,
+        condition_on_previous_text=True,
+        task="transcribe",                # CHANGED from "translate"
         word_timestamps=True,
     )
 
@@ -485,50 +685,85 @@ def transcribe_segment_words(
     samples: np.ndarray,
     offset_sec: float,
     speaker: str | None = None,
+    target_lang: str = "am",
 ):
     """
-    Transcribe+translate a single diarization segment, returning a
-    list of word dicts with absolute timestamps.
+    Two-step transcription for Ethiopian dubbing:
+    1. Whisper ASR — transcribes the source audio (auto-detects source language)
+    2. Translation API — translates each segment to the target Ethiopian language
+    
+    Returns a list of word dicts with absolute timestamps.
+    Each word carries both the original text (for timing) and the segment-level
+    translated text (for subtitle/TTS content).
     """
     words_out = []
 
+    # Step 1: Whisper ASR — always auto-detect source language.
+    # NOTE: Do NOT pass language=target_lang here! The SOURCE audio is not
+    # in the target language. Also, Whisper does not support 'tir' (Tigrinya)
+    # as a language code, so passing it would crash.
     segments, info = whisper_model.transcribe(
         samples,
         beam_size=1,
-        vad_filter=False,                  # diarization already detected speech
-        condition_on_previous_text=False,  # better for hard cuts / segments
-        task="translate",
+        vad_filter=False,
+        condition_on_previous_text=False,
+        task="transcribe",                # ASR only, no Whisper translation
         word_timestamps=True,
+        language=None,                     # Auto-detect source language
     )
+    
+    source_lang = info.language
+    print(f"    Source language detected: {source_lang}")
 
     for seg in segments:
         if not seg.words:
             continue
+        
+        seg_text = seg.text.strip()
+        if not seg_text:
+            continue
+        
+        # Step 2: Translate the entire segment text via API
+        translated = translate_text_api(seg_text, source_lang, target_lang)
+        
+        # Skip segments where translation completely failed
+        if translated.startswith("[UNTRANSLATED]"):
+            print(f"    ⚠ Skipping untranslated segment: {seg_text[:50]}")
+            # Still include words with original text so timing is preserved
+            translated = seg_text  # Fallback to source text
+        
+        print(f"    '{seg_text[:50]}' → '{translated[:50]}'")
+        
+        # Store the segment-level translation with each word for timing alignment
+        # The 'seg_id' groups words that share the same translation
+        seg_id = id(seg)
         for w in seg.words:
             words_out.append(
                 {
                     "start": offset_sec + float(w.start),
                     "end": offset_sec + float(w.end),
                     "text": w.word,
+                    "translated": translated,
+                    "seg_id": seg_id,       # Groups words from same Whisper segment
                     "speaker": speaker,
                 }
             )
 
     return words_out
 
-def words_to_subtitles(words, max_seconds: float = 10.0):
-    """
-    Group word-level timings into SRT subtitles, each up to max_seconds long,
-    cutting ONLY at word boundaries, AND never mixing speakers in the same subtitle.
-    Whenever the speaker changes, we close the current subtitle and start a new one.
+# ==========================================================================
+# ETHIOPIAN MODIFICATION: Subtitle grouping now uses translated text
+# ==========================================================================
 
-    Expects each word dict to have:
-      - "start" (float, seconds)
-      - "end"   (float, seconds)
-      - "text"  (str)
-      - "speaker" (str or None)
+def words_to_subtitles(words, max_seconds: float = 10.0, target_lang: str = "am"):
     """
-    # sort just in case
+    Group word-level timings into SRT subtitles, each up to max_seconds long.
+    Uses the 'translated' field for subtitle content (text in Amharic/Tigrinya/Oromo).
+    
+    Words from the same Whisper segment share the same 'seg_id' and 'translated' text.
+    When a subtitle spans multiple segments, we concatenate the unique translations
+    in order (not just take the last one, which would lose earlier segments).
+    """
     words = sorted(words, key=lambda w: w["start"])
 
     subtitles = []
@@ -538,13 +773,28 @@ def words_to_subtitles(words, max_seconds: float = 10.0):
 
     index = 1
 
+    def _build_subtitle_text(word_list):
+        """Build subtitle text from grouped words, deduplicating by segment."""
+        seen_seg_ids = set()
+        parts = []
+        for w in word_list:
+            seg_id = w.get("seg_id")
+            translated = w.get("translated", w.get("text", ""))
+            if seg_id is not None:
+                if seg_id not in seen_seg_ids:
+                    seen_seg_ids.add(seg_id)
+                    parts.append(translated.strip())
+            else:
+                # Fallback for words without seg_id
+                parts.append(translated.strip())
+        return " ".join(parts) if parts else ""
+
     for w in words:
         w_start = w["start"]
         w_end = w["end"]
         w_speaker = w.get("speaker")
 
         if current_start is None:
-            # start first subtitle
             current_start = w_start
             current_words = [w]
             current_speaker = w_speaker
@@ -554,26 +804,23 @@ def words_to_subtitles(words, max_seconds: float = 10.0):
         duration_if_added = w_end - current_start
         exceeds_max = duration_if_added > max_seconds
 
-        # If adding this word would:
-        #   - exceed max_seconds, OR
-        #   - cross into a different speaker,
-        # then we close the current subtitle and start a new one.
         if (speaker_changed or exceeds_max) and current_words:
-            text = " ".join(x["text"] for x in current_words).strip()
+            text = _build_subtitle_text(current_words)
+            
             sub_start = current_start
             sub_end = current_words[-1]["end"]
 
-            subtitles.append(
-                srt.Subtitle(
-                    index=index,
-                    start=timedelta(seconds=sub_start),
-                    end=timedelta(seconds=sub_end),
-                    content=text,
+            if text:  # Only create subtitle if there's actual text
+                subtitles.append(
+                    srt.Subtitle(
+                        index=index,
+                        start=timedelta(seconds=sub_start),
+                        end=timedelta(seconds=sub_end),
+                        content=text,
+                    )
                 )
-            )
-            index += 1
+                index += 1
 
-            # start new subtitle from this word
             current_start = w_start
             current_words = [w]
             current_speaker = w_speaker
@@ -582,24 +829,27 @@ def words_to_subtitles(words, max_seconds: float = 10.0):
 
     # flush last subtitle
     if current_words:
-        text = " ".join(x["text"] for x in current_words).strip()
+        text = _build_subtitle_text(current_words)
         sub_start = current_start
         sub_end = current_words[-1]["end"]
-        subtitles.append(
-            srt.Subtitle(
-                index=index,
-                start=timedelta(seconds=sub_start),
-                end=timedelta(seconds=sub_end),
-                content=text,
+        if text:
+            subtitles.append(
+                srt.Subtitle(
+                    index=index,
+                    start=timedelta(seconds=sub_start),
+                    end=timedelta(seconds=sub_end),
+                    content=text,
+                )
             )
-        )
 
     return subtitles
 
-def build_srt(segments: List[Dict], audio_wav: str, out_srt_path: str):
+# ==========================================================================
+
+def build_srt(segments: List[Dict], audio_wav: str, out_srt_path: str, target_lang: str = "am"):
     """
-    Generate SRT file from diarized segments and audio,
-    using word-level timestamps and grouping into ~10s subtitles.
+    Generate SRT file from diarized segments and audio.
+    ETHIOPIAN MODIFICATION: Now takes target_lang and uses two-step translation.
     """
     audio = AudioSegment.from_file(audio_wav)
 
@@ -623,19 +873,20 @@ def build_srt(segments: List[Dict], audio_wav: str, out_srt_path: str):
 
         samples = chunk_to_float32(chunk)
 
-        # get words for this diar segment, with absolute times
+        # ETHIOPIAN MODIFICATION: Use target_lang-aware transcription
         seg_words = transcribe_segment_words(
             whisper_model,
             samples,
             offset_sec=start_sec,
             speaker=speaker,
+            target_lang=target_lang,
         )
 
         all_words.extend(seg_words)
         print(f"Diar segment {i} ({speaker}): {len(seg_words)} words")
 
-    # group words into ≤10s subtitles, word aligned
-    subtitles = words_to_subtitles(all_words, max_seconds=10.0)
+    # group words into ≤10s subtitles
+    subtitles = words_to_subtitles(all_words, max_seconds=10.0, target_lang=target_lang)
 
     # write SRT
     with open(out_srt_path, "w", encoding="utf-8") as f:
@@ -672,18 +923,21 @@ def resolve_video_input(x: str):
 
     return x
 
+# ==========================================================================
+# ETHIOPIAN MODIFICATION: Process functions now take target_lang
+# ==========================================================================
 
-def translate_video(video_file, url_or_path, duration, session_id=None, progress=gr.Progress(track_tqdm=True)):
+def translate_video(video_file, url_or_path, duration, target_lang="am", session_id=None, progress=gr.Progress(track_tqdm=True)):
 
     if video_file == None:
         url_or_path = url_or_path
     else:
         url_or_path = video_file
     video_file = resolve_video_input(url_or_path)
-    return process_video(video_file, False, duration, session_id, progress)
+    return process_video(video_file, False, duration, target_lang, session_id, progress)
 
 
-def translate_lipsync_video(video_file, url_or_path, duration, session_id=None, progress=gr.Progress(track_tqdm=True)):
+def translate_lipsync_video(video_file, url_or_path, duration, target_lang="am", session_id=None, progress=gr.Progress(track_tqdm=True)):
 
     if video_file == None:
         url_or_path = url_or_path
@@ -691,13 +945,13 @@ def translate_lipsync_video(video_file, url_or_path, duration, session_id=None, 
         url_or_path = video_file
         
     video_file = resolve_video_input(url_or_path)
-    return process_video(video_file, True, duration, session_id, progress)
+    return process_video(video_file, True, duration, target_lang, session_id, progress)
 
 
-def run_example(video_file, allow_lipsync, duration, session_id = None, progress=gr.Progress(track_tqdm=True)):
+def run_example(video_file, allow_lipsync, duration, target_lang="am", session_id = None, progress=gr.Progress(track_tqdm=True)):
 
     with timer("processed"):
-        result = process_video(video_file, allow_lipsync, duration, session_id, progress)
+        result = process_video(video_file, allow_lipsync, duration, target_lang, session_id, progress)
 
     return result
 
@@ -709,19 +963,26 @@ def get_duration(video_file, allow_lipsync, duration, session_id, progress):
         return (60 + 20 * (duration) // 30) // 2
         
 @spaces.GPU(duration=get_duration, size='xlarge')
-def process_video(video_file, allow_lipsync, duration, session_id = None, progress=gr.Progress(track_tqdm=True)):
+def process_video(video_file, allow_lipsync, duration, target_lang="am", session_id = None, progress=gr.Progress(track_tqdm=True)):
     """
-    Gradio callback:
-    - video_file: temp file object/path from Gradio
-    - returns path to generated SRT file (for download)
+    Main processing pipeline for Ethiopian dubbing.
+    Takes target_lang (display name or code) and uses the corresponding
+    fine-tuned IndexTTS2 model for that language.
     """
     import onnxruntime as ort
+
+    # CRITICAL: Convert display name "Amharic (አማርኛ)" -> "am" etc.
+    target_lang = resolve_lang_code(target_lang)
+    print(f"Target language resolved to: {target_lang}")
 
     if session_id == None:
         session_id = uuid.uuid4().hex
 
     output_dir = os.path.join(os.environ["PROCESSED_RESULTS"], session_id)
     os.makedirs(output_dir, exist_ok=True)
+
+    # Get the TTS model for the target language (lazy-loaded)
+    tts = get_tts_model(target_lang)
 
     # Gradio's File/Video component gives dict or str depending on version
     if isinstance(video_file, dict):
@@ -743,9 +1004,9 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
 
     print(f"duration_s:{duration_s}")
     
-    cmd = [                                                               
-        "ffmpeg",                                                         
-        "-y",                                                             
+    cmd = [                                                              
+        "ffmpeg",                                                        
+        "-y",                                                            
         "-i", src_video_path,                                            
         "-t", f"{duration_s}",                              
         "-c", "copy",          # stream copy, no re-encode               
@@ -762,9 +1023,9 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
     if not segments:
         raise gr.Error("No valid speech segments found for diarization.")
 
-    # 3. Build SRT from diarized segments + whisper
+    # 3. Build SRT — ETHIOPIAN MODIFICATION: Now uses two-step translation
     with timer("Generating srt"):
-        build_srt(segments, audio_16k_wav, srt_path)
+        build_srt(segments, audio_16k_wav, srt_path, target_lang=target_lang)
 
     # ---- ORIGINAL SRT (used for TTS) ----
     with open(srt_path, "r", encoding="utf-8") as f:
@@ -772,12 +1033,9 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
 
     subtitles = list(srt.parse(srt_data))
 
-    # Keep this list as-is for TTS timing
     tts_subtitles = subtitles
 
-    # ---- CREATE 10s-MAX SRT FOR DOWNLOAD ----
     max10_subtitles = tts_subtitles
-    # max10_subtitles = split_subtitles_max_duration(subtitles, max_seconds=10.0)
 
     tts_subtitles = max10_subtitles
     
@@ -800,16 +1058,15 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
         idx = 0
 
         while idx < num_subs:
-            spk_prompts = []      # paths to src_prompt_*.wav
-            texts = []            # subtitle texts for this batch
-            out_paths = []        # where IndexTTS2 will save generated wavs
-            starts_ms = []        # for overlaying later
-            target_ms_list = []   # per-subtitle target durations
+            spk_prompts = []
+            texts = []
+            out_paths = []
+            starts_ms = []
+            target_ms_list = []
             batch_ms_sum = 0
 
             batch_start = idx
 
-            # ---- fill one batch until we hit ~MAX_BATCH_MS ----
             while idx < num_subs:
                 sub = tts_subtitles[idx]
 
@@ -817,19 +1074,15 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
                 end_ms = int(sub.end.total_seconds() * 1000)
                 target_ms = max(end_ms - start_ms, 0)
 
-                # If adding this subtitle would exceed the limit and we already
-                # have something in the batch, stop and process the current batch.
                 if batch_ms_sum + target_ms > MAX_BATCH_MS and len(target_ms_list) > 0:
                     break
 
                 global_idx = idx
 
-                # 1) prompt audio for this subtitle
                 src_chunk = original_audio[start_ms:end_ms]
                 src_prompt_path = os.path.join(output_dir, f"src_prompt_{global_idx}.wav")
                 src_chunk.export(src_prompt_path, format="wav")
 
-                # 2) text + output path
                 text = sub.content.replace("\n", " ")
                 out_path = os.path.join(output_dir, f"gen_{global_idx}.wav")
 
@@ -844,18 +1097,17 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
 
             print(f"batch from {batch_start} to {idx - 1}, batch_ms_sum: {batch_ms_sum}")
 
-            # --- call batched TTS once for this batch ---
             do_sample = True
             top_p = 0.8
             top_k = 30
             temperature = 0.8
             length_penalty = 0.0
             num_beams = 3
-            repetition_penalty = 10.0
+            # Lowered from 10.0: Ethiopian languages have natural repetitions
+            # (e.g., Amharic emphasis patterns like "ጥሩ ጥሩ"). 10.0 suppresses these.
+            repetition_penalty = 3.0
             max_mel_tokens = 1500
 
-            # You could compute some aggregate target_length_ms here if your API supports it,
-            # e.g. avg or max(target_ms_list). For now, keep None as before.
             tts_outputs = tts.infer_batch(
                 spk_audio_prompts=spk_prompts,
                 texts=texts,
@@ -868,7 +1120,11 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
                 use_random=False,
                 interval_silence=200,
                 verbose=False,
-                max_text_tokens_per_segment=120,
+                # Increased from 120: Ge'ez (Amharic/Tigrinya) characters are syllabic
+                # and byte-level tokenizers may expand each char to 3-4 tokens.
+                # 120 tokens is too few for meaningful Ethiopic sentences.
+                # Oromo (Latin script) is fine at 120 but benefits from headroom too.
+                max_text_tokens_per_segment=250,
                 speed=1.0,
                 target_length_ms=target_ms_list,
                 do_sample=do_sample,
@@ -881,7 +1137,6 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
                 max_mel_tokens=max_mel_tokens,
             )
 
-            # --- read generated wavs and overlay them ---
             for local_idx, out_path in enumerate(tts_outputs):
                 start_ms = starts_ms[local_idx]
 
@@ -889,33 +1144,24 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
                 seg = seg - 2
                 timeline = timeline.overlay(seg, position=start_ms)
 
-                # cleanup
                 os.remove(out_path)
                 os.remove(spk_prompts[local_idx])
 
-    # -------------------------------------------------------
-    # Bring back original dialog in the *gaps* (grunts, etc.)
-    # -------------------------------------------------------
-    # Load separated dialog track
+    # Bring back original dialog in the gaps
     dialog = AudioSegment.from_file(vocal_wav)
-
-    # Make sure it matches the TTS timeline parameters
     dialog = dialog.set_frame_rate(timeline.frame_rate).set_channels(timeline.channels)
 
     total_len_ms = len(timeline)
 
-    # Collect speech regions from subtitles (approximate "where TTS will speak")
     speech_regions = []
     for sub in tts_subtitles:
         start_ms = int(sub.start.total_seconds() * 1000)
         end_ms = int(sub.end.total_seconds() * 1000)
-        # clamp to track length
         start_ms = max(0, min(start_ms, total_len_ms))
         end_ms = max(0, min(end_ms, total_len_ms))
         if end_ms > start_ms:
             speech_regions.append((start_ms, end_ms))
 
-    # Merge overlapping/adjacent regions
     speech_regions.sort()
     merged = []
     for s, e in speech_regions:
@@ -923,12 +1169,11 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
             merged.append([s, e])
         else:
             last_s, last_e = merged[-1]
-            if s <= last_e:  # overlap or touch
+            if s <= last_e:
                 merged[-1][1] = max(last_e, e)
             else:
                 merged.append([s, e])
 
-    # Compute the complement: regions where there's NO subtitle (gaps)
     gaps = []
     cursor = 0
     for s, e in merged:
@@ -938,14 +1183,12 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
     if cursor < total_len_ms:
         gaps.append((cursor, total_len_ms))
 
-    # Overlay original dialog only in those gaps
-    MIN_GAP_MS = 10  # ignore ultra-tiny gaps
+    MIN_GAP_MS = 10
 
     for g_start, g_end in gaps:
         if g_end - g_start < MIN_GAP_MS:
             continue
 
-        # Extract that piece of the original dialog
         original_chunk = dialog[g_start:g_end]
         original_chunk = original_chunk + 6
 
@@ -956,15 +1199,12 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
     audio_in = output_dir + "/final_output.wav"
     audio_16k_in = output_dir + "/final_16k_output.wav"
     
-    # ---------- 5. Mix background + new TTS vocal ----------
+    # Mix background + new TTS vocal
     
     if background_wav is not None:
         eff = AudioSegment.from_file(effect_wav)
         bg = AudioSegment.from_file(background_wav)
 
-        
-    
-        # If background is shorter than the TTS timeline, loop it
         if len(eff) < len(timeline):
             loops = math.ceil(len(timeline) / len(eff))
             eff = eff * loops
@@ -973,12 +1213,8 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
             loops = math.ceil(len(timeline) / len(bg))
             bg = bg * loops
 
-
-    
-        # Cut or match to TTS length
         eff = eff[:len(timeline)]
         bg = bg[:len(timeline)]
-        
     
         bg = bg + 2
         eff = eff + 2
@@ -987,7 +1223,6 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
         final_audio = bg.overlay(eff_timeline)
         final_16k_audio = timeline.set_frame_rate(16000).set_channels(1)
     else:
-        # Fallback: no background found, just use TTS
         final_audio = timeline
         final_16k_audio = timeline
     
@@ -1029,13 +1264,13 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
     cmd = [
         "ffmpeg",
         "-loglevel", "error",
-        "-y",               # overwrite output file
-        "-i", lipsynced_video,     # input video
-        "-i", audio_in_upsampled,     # new audio
-        "-c:v", "copy",     # do not re-encode video
-        "-map", "0:v:0",    # take video from input 0
-        "-map", "1:a:0",    # take audio from input 1
-        "-shortest",        # stop when either track ends
+        "-y",
+        "-i", lipsynced_video,
+        "-i", audio_in_upsampled,
+        "-c:v", "copy",
+        "-map", "0:v:0",
+        "-map", "1:a:0",
+        "-shortest",
         video_out,
     ]
 
@@ -1043,7 +1278,6 @@ def process_video(video_file, allow_lipsync, duration, session_id = None, progre
     subprocess.run(cmd, check=True)
 
 
-    # IMPORTANT: return the 10s-max SRT for download
     return video_out, srt_10s_path, audio_16k_in
 
 
@@ -1054,15 +1288,15 @@ css = """
         max-width: 1600px;
     }
     #modal-container {
-    width: 100vw;            /* Take full viewport width */
-    height: 100vh;           /* Take full viewport height (optional) */
-    display: flex;           
-    justify-content: center; /* Center content horizontally */
-    align-items: center;     /* Center content vertically if desired */
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     }
     #modal-content {
     width: 100%;
-    max-width: 700px;         /* Limit content width */
+    max-width: 700px;
     margin: 0 auto;
     border-radius: 8px;
     padding: 1.5rem;
@@ -1092,7 +1326,7 @@ css = """
     }
     .toggle-container {
     display: inline-flex;
-    background-color: #ffd6ff;  /* light pink background */
+    background-color: #ffd6ff;
     border-radius: 9999px;
     padding: 4px;
     position: relative;
@@ -1108,33 +1342,29 @@ css = """
     flex: 1;
     text-align: center;
     font-weight: 700;
-    color: #4b2ab5; /* dark purple text for unselected */
+    color: #4b2ab5;
     padding: 6px 22px;
     border-radius: 9999px;
     cursor: pointer;
     transition: color 0.25s ease;
     }
-    /* Moving highlight */
     .toggle-highlight {
     position: absolute;
     top: 4px;
     left: 4px;
     width: calc(50% - 4px);
     height: calc(100% - 8px);
-    background-color: #4b2ab5; /* dark purple background */
+    background-color: #4b2ab5;
     border-radius: 9999px;
     transition: transform 0.25s ease;
     z-index: 1;
     }
-    /* When "True" is checked */
     #true:checked ~ label[for="true"] {
-    color: #ffd6ff; /* light pink text */
+    color: #ffd6ff;
     }
-    /* When "False" is checked */
     #false:checked ~ label[for="false"] {
-    color: #ffd6ff; /* light pink text */
+    color: #ffd6ff;
     }
-    /* Move highlight to right side when False is checked */
     #false:checked ~ .toggle-highlight {
     transform: translateX(100%);
     }
@@ -1145,8 +1375,6 @@ def _fmt_seconds(sec: int) -> str:
     return f"{sec}s"
 
 def compute_etas(duration_value: int):
-    # get_duration signature: (video_file, allow_lipsync, duration, session_id, progress)
-    # We only need allow_lipsync + duration; pass placeholders for the rest.
     t_no = get_duration(None, False, int(duration_value), None, None)
     t_ls = get_duration(None, True,  int(duration_value), None, None)
 
@@ -1166,6 +1394,12 @@ def start_session(request: gr.Request):
 
     return request.session_hash
 
+# ==========================================================================
+# ETHIOPIAN MODIFICATION: Gradio UI with Language Selector
+# ==========================================================================
+
+# Note: LANG_DISPLAY_TO_CODE is defined near the top of the file.
+
 with gr.Blocks(css=css) as demo:
 
     session_state = gr.State()
@@ -1176,18 +1410,19 @@ with gr.Blocks(css=css) as demo:
             """
             <div style="text-align: center;">
                 <p style="font-size:16px; display: inline; margin: 0;">
-                    Translate and lipsync your clips from any language to English
+                    Translate and lipsync your clips from any language to
+                    <strong>🇪🇹 Amharic / Tigrinya / Oromo</strong>
                 </p>
             </div>
             <div style="text-align: center;">
                 <p style="font-size:16px; display: inline; margin: 0;">
-                    <strong>OutofLipSync</strong>
+                    <strong>OutofLipSync-🇪🇹</strong>
                 </p>
                 <p style="font-size:16px; display: inline; margin: 0;">
-                    -- HF Space By:
+                    -- Based on OutofLipSync by
                 </p>
                 <a href="https://huggingface.co/alexnasa" style="display: inline-block; vertical-align: middle; margin-left: 0.5em;">
-                    <img src="https://img.shields.io/badge/🤗-Follow Me-yellow.svg">
+                    <img src="https://img.shields.io/badge/🤗-alexnasa-yellow.svg">
                 </a>
             </div>
             """
@@ -1223,34 +1458,20 @@ with gr.Blocks(css=css) as demo:
                         
                         url_in = gr.Textbox(label="TikTok URL", placeholder="https://www.tiktok.com/@user/video/...")
 
+    # ETHIOPIAN MODIFICATION: Language selector dropdown
+                target_lang_dropdown = gr.Dropdown(
+                    choices=list(LANG_DISPLAY_TO_CODE.keys()),
+                    value="Amharic (አማርኛ)",
+                    label="🇪🇹 Target Language",
+                    info="Choose which Ethiopian language to dub into"
+                )
+
                 duration = gr.Slider(5, 120, 10, step=1, label="Duration(s)")
-
-                uncached_examples = gr.Examples(                    
-                    examples=[ 
-
-                        [
-                            "assets/popup-2.mp4",
-                        ],
-                        
-                        [
-                            "assets/sofia-esp.mp4",
-                        ],
-
-                        [
-                            "assets/alba-port.mp4",
-                        ],
-
-                        [
-                            "assets/lena-de.mp4",
-                        ],
-                    ],
-                    inputs=video_input,
-                    )
 
             with gr.Column(elem_id="step-column"):
                 gr.HTML("""
                 <div>
-                    <span style="font-size: 24px;">2. Translate + 💋 </span><br>
+                    <span style="font-size: 24px;">2. Translate to 🇪🇹 + 💋 </span><br>
                 </div>
                 """)
 
@@ -1260,81 +1481,27 @@ with gr.Blocks(css=css) as demo:
                 eta_translate_md = gr.Markdown("")
                 eta_lipsync_md = gr.Markdown("")
 
-                translate_btn = gr.Button("🤹‍♂️ Translate")
-                translate_lipsync_btn = gr.Button("🤹‍♂️ Translate + 💋 Lipsync", variant='primary', elem_classes="button-gradient")
+                translate_btn = gr.Button("🇪🇹 Translate to Ethiopian")
+                translate_lipsync_btn = gr.Button("🇪🇹 Translate + 💋 Lipsync", variant='primary', elem_classes="button-gradient")
         
             with gr.Column(elem_id="step-column"):
                 gr.HTML("""
                 <div>
-                    <span style="font-size: 24px;">Lipsynced Examples </span><br>
+                    <span style="font-size: 24px;">Outputs </span><br>
                 </div>
                 """)
                 vocal_16k_output = gr.File(label="Vocal 16k", visible=False)
-                srt_output = gr.File(label="Download translated diarized SRT", visible=False)
-
-                cached_examples = gr.Examples(                    
-                    examples=[ 
-            
-                        [
-                            "assets/monica-ita.mp4",
-                            True,
-                            5
-                        ],
-
-                        [
-                            "assets/koji.mp4",
-                            False,
-                            60
-                        ],
-
-                        [
-                            "assets/elena-es.mp4",
-                            True,
-                            10
-                        ],
-
-                        [
-                            "assets/ana-es.mp4",
-                            True,
-                            10
-                        ],
-                        
-                        [
-                            "assets/spanish-2.mp4",
-                            True,
-                            5
-                        ],
-
-                        [
-                            "assets/italian.mp4",
-                            True,
-                            5
-                        ],
-
-                        [
-                            "assets/alica-por-2.mp4",
-                            True,
-                            10
-                        ],
-
-            
-                    ],
-                    fn=run_example,
-                    inputs=[video_input, lipsync, duration],
-                    outputs=[video_output, srt_output, vocal_16k_output],
-                    cache_examples=True
-                    )
-        
+                srt_output = gr.File(label="Download translated Ethiopian SRT", visible=True)
 
     translate_btn.click(
         fn=translate_video,
-        inputs=[video_input, url_in, duration, session_state],
+        inputs=[video_input, url_in, duration, target_lang_dropdown, session_state],
         outputs=[video_output, srt_output, vocal_16k_output],
     )
     
     translate_lipsync_btn.click(
         fn=translate_lipsync_video,
-        inputs=[video_input, url_in, duration, session_state],
+        inputs=[video_input, url_in, duration, target_lang_dropdown, session_state],
         outputs=[video_output, srt_output, vocal_16k_output],
     )
 
@@ -1347,6 +1514,10 @@ with gr.Blocks(css=css) as demo:
 
 
 if __name__ == "__main__":
-    demo.unload(cleanup)
-    demo.queue()
-    demo.launch(ssr_mode=False)
+    import sys
+    if "--test-api" in sys.argv:
+        test_translation_api()
+    else:
+        demo.unload(cleanup)
+        demo.queue()
+        demo.launch(ssr_mode=False)
