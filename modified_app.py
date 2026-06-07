@@ -657,9 +657,16 @@ def translate_text_api(text: str, source_lang: str, target_lang_code: str) -> st
 
     target_name = TARGET_LANG_NAMES.get(target_lang_code, "Amharic")
     
+    script_requirement = ""
+    if target_lang_code in ["am", "tir"]:
+        script_requirement = "Use ONLY the Ge'ez (Ethiopic) script. Do not include any English words or Latin letters (e.g. write technical terms like 'boarding pass' phonetically in Ge'ez characters instead of keeping them in English). "
+    elif target_lang_code == "om":
+        script_requirement = "Use the Afaan Oromoo vocabulary. Do not mix English words in the translation. "
+
     system_prompt = (
         f"You are a professional translator. "
         f"Translate the following text from {source_lang} to {target_name}. "
+        f"{script_requirement}"
         f"Output ONLY the translated text, nothing else. "
         f"Do not add quotes, explanations, or any extra text."
     )
@@ -1198,9 +1205,7 @@ def process_video(video_file, allow_lipsync, duration, target_lang="am", session
             temperature = 0.8
             length_penalty = 0.0
             num_beams = 3
-            # Lowered from 10.0: Ethiopian languages have natural repetitions
-            # (e.g., Amharic emphasis patterns like "ጥሩ ጥሩ"). 10.0 suppresses these.
-            repetition_penalty = 3.0
+            repetition_penalty = 10.0
             max_mel_tokens = 1500
 
             tts_outputs = tts.infer_batch(
@@ -1215,11 +1220,7 @@ def process_video(video_file, allow_lipsync, duration, target_lang="am", session
                 use_random=False,
                 interval_silence=200,
                 verbose=False,
-                # Increased from 120: Ge'ez (Amharic/Tigrinya) characters are syllabic
-                # and byte-level tokenizers may expand each char to 3-4 tokens.
-                # 120 tokens is too few for meaningful Ethiopic sentences.
-                # Oromo (Latin script) is fine at 120 but benefits from headroom too.
-                max_text_tokens_per_segment=250,
+                max_text_tokens_per_segment=120,
                 speed=1.0,
                 target_length_ms=target_ms_list,
                 do_sample=do_sample,
