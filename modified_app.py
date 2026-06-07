@@ -155,6 +155,12 @@ if os.path.exists(_cfg_path):
         _conf["qwen_emo_path"] = "dummy_qwen_path"
         _conf_changed = True
 
+    # Log the exact tokenizer path to verify correctness
+    _bpe_path = _conf.get("dataset", {}).get("bpe_model")
+    print(f"  ℹ Configured tokenizer (bpe_model) path: {_bpe_path}")
+    if _bpe_path:
+        print(f"  ℹ Tokenizer file exists on disk: {os.path.exists(_bpe_path)}")
+
     if _conf_changed:
         with open(_cfg_path, "w") as f:
             yaml.safe_dump(_conf, f)
