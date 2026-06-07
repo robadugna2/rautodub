@@ -664,13 +664,10 @@ def translate_text_api(text: str, source_lang: str, target_lang_code: str) -> st
         f"Do not add quotes, explanations, or any extra text."
     )
 
+    # Use the correct API format: {"System": ..., "User": ...}
     payload = {
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": text},
-        ],
-        "stream": False,
-        "temperature": 0.3,
+        "System": system_prompt,
+        "User": text,
     }
 
     headers = {
@@ -689,33 +686,30 @@ def translate_text_api(text: str, source_lang: str, target_lang_code: str) -> st
 
             if resp.status_code == 200:
                 data = resp.json()
-                
-                # --- OpenAI-compatible response format ---
-                # {"choices": [{"message": {"content": "translated text"}}]}
-                if "choices" in data and len(data["choices"]) > 0:
-                    translated = data["choices"][0]["message"]["content"].strip()
-                    if translated:
-                        return translated
 
-                # --- Alternative: {"response": "translated text"} ---
-                if "response" in data:
-                    translated = data["response"].strip()
-                    if translated:
-                        return translated
+                # --- Primary format: {"status": "success", "content": "translated text"} ---
+                if data.get("status") == "success" and data.get("content"):
+                    return data["content"].strip()
 
-                # --- Alternative: {"text": "translated text"} ---
-                if "text" in data:
-                    translated = data["text"].strip()
-                    if translated:
-                        return translated
+                # --- Fallback: {"content": "translated text"} ---
+                if "content" in data and data["content"]:
+                    return data["content"].strip()
 
-                # --- Alternative: plain string in data ---
+                # --- Fallback: {"response": "translated text"} ---
+                if "response" in data and data["response"]:
+                    return data["response"].strip()
+
+                # --- Fallback: {"text": "translated text"} ---
+                if "text" in data and data["text"]:
+                    return data["text"].strip()
+
+                # --- Fallback: plain string ---
                 if isinstance(data, str) and data.strip():
                     return data.strip()
 
                 last_error = f"API returned 200 but unexpected format: {str(data)[:200]}"
                 print(f"  ⚠ {last_error}")
-                
+
             else:
                 last_error = f"API returned HTTP {resp.status_code}: {resp.text[:200]}"
                 print(f"  ⚠ {last_error}")
