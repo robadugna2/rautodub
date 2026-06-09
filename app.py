@@ -97,7 +97,9 @@ if os.path.exists(_cfg_path):
     with open(_cfg_path, "r") as f:
         _conf = yaml.safe_load(f)
     if "dataset" in _conf and "bpe_model" in _conf["dataset"]:
-        _conf["dataset"]["bpe_model"] = os.path.join(current_dir, "checkpoints", "am_om_ti_extended.model")
+        # NOTE: IndexTTS2 infer_v2.py does os.path.join(model_dir, bpe_model) internally,
+        # so bpe_model must be a RELATIVE path (just the filename), not absolute!
+        _conf["dataset"]["bpe_model"] = "am_om_ti_extended.model"
     with open(_cfg_path, "w") as f:
         yaml.safe_dump(_conf, f)
 

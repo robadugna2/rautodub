@@ -139,7 +139,9 @@ if os.path.exists(_cfg_path):
     # Fix 1: Tokenizer path — config says "../tokenizers/am_om_ti_extended.model"
     # but the file is downloaded flat into TTS_CHECKPOINT_DIR.
     if "dataset" in _conf and "bpe_model" in _conf["dataset"]:
-        _conf["dataset"]["bpe_model"] = os.path.join(TTS_CHECKPOINT_DIR, "am_om_ti_extended.model")
+        # NOTE: IndexTTS2 infer_v2.py does os.path.join(model_dir, bpe_model) internally,
+        # so bpe_model must be a RELATIVE path (just the filename), not absolute!
+        _conf["dataset"]["bpe_model"] = "am_om_ti_extended.model"
         _conf_changed = True
 
     # Fix 2: GPT checkpoint name — config says "gpt.pth" but the HF repo
@@ -793,16 +795,11 @@ def transcribe_segment_words(
     samples: np.ndarray,
     offset_sec: float,
     speaker: str | None = None,
-    target_lang: str = "am",
 ):
     """
-    Two-step transcription for Ethiopian dubbing:
+    ASR transcription for Ethiopian dubbing:
     1. Whisper ASR — transcribes the source audio (auto-detects source language)
-    2. Translation API — translates each segment to the target Ethiopian language
-    
-    Returns a list of word dicts with absolute timestamps.
-    Each word carries both the original text (for timing) and the segment-level
-    translated text (for subtitle/TTS content).
+    Returns a list of word dicts with absolute timestamps, and the detected language.
     """
     words_out = []
 
@@ -821,57 +818,33 @@ def transcribe_segment_words(
     )
     
     source_lang = info.language
-    print(f"    Source language detected: {source_lang}")
 
     for seg in segments:
         if not seg.words:
             continue
-        
-        seg_text = seg.text.strip()
-        if not seg_text:
-            continue
-        
-        # Step 2: Translate the entire segment text via API
-        translated = translate_text_api(seg_text, source_lang, target_lang)
-        
-        # Skip segments where translation completely failed
-        if translated.startswith("[UNTRANSLATED]"):
-            print(f"    ⚠ Skipping untranslated segment: {seg_text[:50]}")
-            # Still include words with original text so timing is preserved
-            translated = seg_text  # Fallback to source text
-        
-        print(f"    '{seg_text[:50]}' → '{translated[:50]}'")
-        
-        # Store the segment-level translation with each word for timing alignment
-        # The 'seg_id' groups words that share the same translation
-        seg_id = id(seg)
         for w in seg.words:
             words_out.append(
                 {
                     "start": offset_sec + float(w.start),
                     "end": offset_sec + float(w.end),
                     "text": w.word,
-                    "translated": translated,
-                    "seg_id": seg_id,       # Groups words from same Whisper segment
                     "speaker": speaker,
                 }
             )
 
-    return words_out
+    return words_out, source_lang
 
 # ==========================================================================
-# ETHIOPIAN MODIFICATION: Subtitle grouping now uses translated text
+# ETHIOPIAN MODIFICATION: Subtitle grouping
 # ==========================================================================
 
-def words_to_subtitles(words, max_seconds: float = 10.0, target_lang: str = "am"):
+def words_to_subtitles(words, max_seconds: float = 10.0):
     """
-    Group word-level timings into SRT subtitles, each up to max_seconds long.
-    Uses the 'translated' field for subtitle content (text in Amharic/Tigrinya/Oromo).
-    
-    Words from the same Whisper segment share the same 'seg_id' and 'translated' text.
-    When a subtitle spans multiple segments, we concatenate the unique translations
-    in order (not just take the last one, which would lose earlier segments).
+    Group word-level timings into SRT subtitles, each up to max_seconds long,
+    cutting ONLY at word boundaries, AND never mixing speakers in the same subtitle.
+    Whenever the speaker changes, we close the current subtitle and start a new one.
     """
+    # sort just in case
     words = sorted(words, key=lambda w: w["start"])
 
     subtitles = []
@@ -881,28 +854,13 @@ def words_to_subtitles(words, max_seconds: float = 10.0, target_lang: str = "am"
 
     index = 1
 
-    def _build_subtitle_text(word_list):
-        """Build subtitle text from grouped words, deduplicating by segment."""
-        seen_seg_ids = set()
-        parts = []
-        for w in word_list:
-            seg_id = w.get("seg_id")
-            translated = w.get("translated", w.get("text", ""))
-            if seg_id is not None:
-                if seg_id not in seen_seg_ids:
-                    seen_seg_ids.add(seg_id)
-                    parts.append(translated.strip())
-            else:
-                # Fallback for words without seg_id
-                parts.append(translated.strip())
-        return " ".join(parts) if parts else ""
-
     for w in words:
         w_start = w["start"]
         w_end = w["end"]
         w_speaker = w.get("speaker")
 
         if current_start is None:
+            # start first subtitle
             current_start = w_start
             current_words = [w]
             current_speaker = w_speaker
@@ -913,12 +871,11 @@ def words_to_subtitles(words, max_seconds: float = 10.0, target_lang: str = "am"
         exceeds_max = duration_if_added > max_seconds
 
         if (speaker_changed or exceeds_max) and current_words:
-            text = _build_subtitle_text(current_words)
-            
+            text = " ".join(x["text"] for x in current_words).strip()
             sub_start = current_start
             sub_end = current_words[-1]["end"]
 
-            if text:  # Only create subtitle if there's actual text
+            if text:
                 subtitles.append(
                     srt.Subtitle(
                         index=index,
@@ -929,6 +886,7 @@ def words_to_subtitles(words, max_seconds: float = 10.0, target_lang: str = "am"
                 )
                 index += 1
 
+            # start new subtitle from this word
             current_start = w_start
             current_words = [w]
             current_speaker = w_speaker
@@ -937,7 +895,7 @@ def words_to_subtitles(words, max_seconds: float = 10.0, target_lang: str = "am"
 
     # flush last subtitle
     if current_words:
-        text = _build_subtitle_text(current_words)
+        text = " ".join(x["text"] for x in current_words).strip()
         sub_start = current_start
         sub_end = current_words[-1]["end"]
         if text:
@@ -969,6 +927,7 @@ def build_srt(segments: List[Dict], audio_wav: str, out_srt_path: str, target_la
     )
 
     all_words = []
+    detected_source_langs = []
 
     for i, seg in enumerate(segments, start=1):
         start_sec = seg["start"]
@@ -981,20 +940,40 @@ def build_srt(segments: List[Dict], audio_wav: str, out_srt_path: str, target_la
 
         samples = chunk_to_float32(chunk)
 
-        # ETHIOPIAN MODIFICATION: Use target_lang-aware transcription
-        seg_words = transcribe_segment_words(
+        # ETHIOPIAN MODIFICATION: Get ASR words in source language
+        seg_words, source_lang = transcribe_segment_words(
             whisper_model,
             samples,
             offset_sec=start_sec,
             speaker=speaker,
-            target_lang=target_lang,
         )
+        if source_lang:
+            detected_source_langs.append(source_lang)
 
         all_words.extend(seg_words)
         print(f"Diar segment {i} ({speaker}): {len(seg_words)} words")
 
-    # group words into ≤10s subtitles
-    subtitles = words_to_subtitles(all_words, max_seconds=10.0, target_lang=target_lang)
+    # Determine dominant source language, default to "en"
+    source_lang = "en"
+    if detected_source_langs:
+        from collections import Counter
+        source_lang = Counter(detected_source_langs).most_common(1)[0][0]
+    print(f"Dominant source language detected for translation: {source_lang}")
+
+    # group words into ≤10s subtitles in source language
+    subtitles = words_to_subtitles(all_words, max_seconds=10.0)
+
+    # Translate each subtitle's text to the target Ethiopian language
+    print(f"Translating {len(subtitles)} subtitles from {source_lang} to {target_lang}...")
+    for sub in subtitles:
+        orig_text = sub.content.strip()
+        if orig_text:
+            translated = translate_text_api(orig_text, source_lang, target_lang)
+            if translated.startswith("[UNTRANSLATED]"):
+                print(f"    ⚠ Skipping untranslated subtitle: {orig_text[:50]}")
+                translated = orig_text
+            print(f"    '{orig_text[:50]}' → '{translated[:50]}'")
+            sub.content = translated
 
     # write SRT
     with open(out_srt_path, "w", encoding="utf-8") as f:

@@ -30,13 +30,6 @@ Transform OutofLipSync from "any language → English" to "any language → Amha
 # Option A: If you have ONE model fine-tuned on all 3 languages
 snapshot_download("robadugna/rtts2", local_dir="./checkpoints")
 
-# Option B: If you have separate models per language
-TTS_MODELS = {
-    "am": "YOUR_USERNAME/IndexTTS-2-amharic",
-    "tir": "YOUR_USERNAME/IndexTTS-2-tigrinya",
-    "om": "YOUR_USERNAME/IndexTTS-2-oromo",
-}
-```
 
 ### 3. 🗣️ Whisper Model Size
 **Current:** `MODEL_SIZE = "medium"`

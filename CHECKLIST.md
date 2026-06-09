@@ -57,8 +57,8 @@ python modified_app.py --test-api
 
 | # | What | Original | Modified |
 |---|------|----------|----------|
-| 1 | Translation | Whisper `task="translate"` (→ English) | Whisper ASR + NLLB-200 MT (→ AM/TIR/OM) |
-| 2 | TTS model | `IndexTeam/IndexTTS-2` (English) | Your fine-tuned models per language |
+| 1 | Translation | Whisper `task="translate"` (→ English) | Whisper ASR + Mapiz Chat Completion API (→ AM/TIR/OM) |
+| 2 | TTS model | `IndexTeam/IndexTTS-2` (English) | Your fine-tuned single multilingual model |
 | 3 | Whisper size | `medium` | `large-v3` (better Ethiopian recognition) |
 | 4 | UI | No language selector | Dropdown: አማርኛ / ትግርኛ / Afaan Oromoo |
 | 5 | Subtitles | English SRT | Amharic/Tigrinya/Oromo SRT |
@@ -79,7 +79,8 @@ Input Video (any language)
     ├─► Whisper large-v3: ASR → transcribe source text
     │         (task="transcribe", NOT "translate")
     │
-    ├─► NLLB-200: translate source text → Amharic/Tigrinya/Oromo
+    ├─► Mapiz API: translate subtitle text → Amharic/Tigrinya/Oromo
+    │         (done at subtitle level to avoid repetitions)
     │
     ├─► IndexTTS2 (your fine-tuned model): 
     │     speak the translated text in cloned voice
